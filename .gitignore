@@ -1,5 +1,5 @@
 *.jpg
-
+*.ppm
 *.o
 *.txt
 *.zip

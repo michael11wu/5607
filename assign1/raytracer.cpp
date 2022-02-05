@@ -9,6 +9,7 @@
 
 using namespace std;
 
+//Parsing scene and returns a scene object
 Scene parse(string filename) {
 
     Scene scene;
@@ -107,7 +108,8 @@ Scene parse(string filename) {
 
         }
         else {
-            fprintf(stderr,"Eye word not recognized");
+            fprintf(stderr,"%s ",keyword.c_str());
+            fprintf(stderr,"Word not recognized\n");
             exit(-1);
         }
         std::getline(inputstream, keyword, '\n');
@@ -115,6 +117,8 @@ Scene parse(string filename) {
     return scene;
 }
 
+
+//Functions to compute linear algebra ops
 vec3 cross(vec3 a, vec3 b) {
     vec3 u{
         (a.y*b.z) - (a.z*b.y),
@@ -221,7 +225,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
                 }
             }
 
-            else if (t2 > 0 && t1 > 0) {
+            else if (t2 > 0 && t1 > 0) { //both ts are positive
                 float t = min(t1,t2);
                 if (t < closest_t) {
                     closest_sphere = sphere;
@@ -230,7 +234,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
                 }
             }
         }
-        else if (discriminant == 0) {
+        else if (discriminant == 0) { //one intersection point
              float t = -b / 2.0;
              if (t > 0 && t < closest_t) {
                  closest_t = t;
@@ -244,7 +248,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
         return scene.bkgcolor;
     }
     else {
-        //printf("INTERSECTION\n");
+        //printf("T: %f\n", closest_t);
         return shade_ray(closest_sphere.index, scene);
     }
 }
@@ -252,7 +256,9 @@ vec3 trace_ray(Ray ray, Scene scene) {
 
 int main(int argc, char* argv[]) {
     Scene scene;
-    float viewdist = 1;
+
+
+    float viewdist = 5.0;
     if (argc == 2) {
         scene = parse(argv[1]);
     }
@@ -261,6 +267,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    //initialize array to store color values
+    vec3 **imageArray = new vec3 *[scene.height];
+    for (uint32_t i = 0; i < scene.height; i++) {
+        imageArray[i] = new vec3[scene.width];
+    }
+
+
+    //Define the coordinate axis
     vec3 u = cross(scene.viewdir, scene.updir);
     u = unit(u);
 
@@ -268,16 +282,24 @@ int main(int argc, char* argv[]) {
     v = unit(v);
 
 
-    //vec3 w = scene.viewdir*(-1);
-
+    vec3 w = scene.viewdir*(-1);
     //cout << u << endl;
     //cout << v << endl;
     // cout << w << endl;
-    float h_view = 2 * viewdist * tanh(scene.vfov/2.0);
+
+    //convert to radians
+
+    float fov_r = (scene.vfov/2.0) * (3.14/180.0);
+    //cout<< fov_r << endl;
+    float h_view = 2 * viewdist * tanf(fov_r);
+    //cout << h_view << endl;
+
+    //cout<< h_view << endl;
 
     float aspect_ratio = float(scene.width)/float(scene.height);
     float w_view = h_view * aspect_ratio;
 
+    //calculate scene grid
     vec3 ul = scene.eye + (unit(scene.viewdir)*viewdist) - (u * (w_view/2.0)) + (v * (h_view/2.0));
     vec3 ur = scene.eye + (unit(scene.viewdir)*viewdist) + (u * (w_view/2.0)) + (v * (h_view/2.0));
     vec3 ll = scene.eye + (unit(scene.viewdir)*viewdist) - (u * (w_view/2.0)) - (v * (h_view/2.0));
@@ -295,18 +317,55 @@ int main(int argc, char* argv[]) {
 
     h_offset = (ur-ul) / (scene.width);
     v_offset = (ll-ul) / (scene.height);
-    ch_offset = h_offset / 2.0f;
-    cv_offset = v_offset / 2.0f;
+    ch_offset = (ur-ul) / (2 * scene.width);
+    cv_offset = (ll-ul) / (2 * scene.height);
 
     // cout << h_offset << endl;
     // cout << v_offset << endl;
     // cout << ch_offset << endl;
     // cout << cv_offset << endl; 
 
+
+    //shoot rays into the viewing window
+    for (int j = 0; j < scene.height; j++) {
+        for (int i = 0; i < scene.width; i++) {
+            vec3 point = ul + (h_offset * i) + (v_offset * j) + ch_offset + cv_offset;
+            Ray ray;
+            ray.origin = scene.eye;
+            vec3 dir = point - ray.origin;
+            dir = unit(dir);
+            ray.dir = dir;
+
+            //call to check it if intersects
+            vec3 color = trace_ray(ray, scene);
+            imageArray[j][i]=color;
+        }
+    }
+
+
+     //Write to ppm
+
     string outputfile = "raytracer.ppm";
     ofstream output_stream(outputfile, ios::out | ios::binary);
 
-    //testing intersection
+    output_stream << "P3\n"
+    << scene.width << " "
+    << scene.height << "\n"
+    << 255 << "\n";
+
+    for (int j = 0; j < scene.height; j++) {
+        for (int i = 0; i < scene.width; i++) {
+            output_stream << imageArray[j][i].x*255 << " " << imageArray[j][i].y*255 << " " << imageArray[j][i].z*255 << " ";
+        }
+    }
+
+    //Delete
+    delete[] imageArray;
+
+
+}
+
+//testing intersection
     
     /*Ray raytest;
     raytest.origin = vec3{
@@ -347,27 +406,3 @@ int main(int argc, char* argv[]) {
         printf("%f\n",t2);
     }
     */
-
-
-
-
-    //header for ppm
-    output_stream << "P3\n"
-    << scene.width << " "
-    << scene.height << "\n"
-    << 255 << "\n";
-
-    for (int j = 0; j < scene.height; j++) {
-        for (int i = 0; i < scene.width; i++) {
-            vec3 point = ul + (h_offset * i) + (v_offset * j) + ch_offset + cv_offset;
-            Ray ray;
-            ray.origin = scene.eye;
-            vec3 dir = point - ray.origin;
-            dir = unit(dir);
-            ray.dir = dir;
-
-            vec3 color = trace_ray(ray, scene);
-            output_stream << color.x*255 << " " << color.y*255 << " " << color.z*255 << " ";
-        }
-    }
-}

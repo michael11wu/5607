@@ -74,6 +74,7 @@ struct Scene {
     int height;
     int width;
     bool depth = false; //flag if depthcueing is being used
+    bool softshadow = false;
     //bool atten = false;
 };
 

@@ -7,6 +7,8 @@
 #include <math.h>
 #include <iostream>
 #include <algorithm>
+#include <stdlib.h>
+#include <time.h>
 
 using namespace std;
 
@@ -25,10 +27,11 @@ Scene parse(string filename) {
     string keyword;
     int index = -1;
 
-    while(getline(inputstream, keyword, ' ')) {
+    while(getline(inputstream, keyword, ' ') && !(inputstream.eof())) {
 
         //If keyword starts with a \n, cut it off
-        if (keyword.c_str()[0] == '\n') {
+        while (keyword.c_str()[0] == '\n') {
+            //printf("%s\n",keyword.c_str());
             keyword = keyword.erase(0,1);
         }
 
@@ -134,6 +137,13 @@ Scene parse(string filename) {
 
         }
 
+        else if (keyword == "softshadow") {
+            bool flag;
+            inputstream >> flag;
+            scene.softshadow = flag;
+            printf("Soft shadow: %d\n", flag);
+        }
+
         else if (keyword == "imsize") {
             int w,h;
             inputstream >> w >> h;
@@ -236,6 +246,91 @@ ostream& operator<<(ostream& os, vec3 vect) {
     return cout << vect.x << " " << vect.y << " " << vect.z;
 }
 
+float soft_shadow(Ray shadow, Sphere s, Light light, vec3 intersect) {
+    srand(time(0)); //rand seed
+    float shadow_flag = 0;
+    for (int i = 0; i < 120; i++) {
+
+        //printf("Shadow flag: %f\n", shadow_flag);
+
+        float light_distance = length(light.position - intersect);
+        
+
+        //printf("CHANGE: \n");
+        //cout << ((float(rand()/float(RAND_MAX)) * 2) - (2/2.0f))<< endl;
+        //jitter
+        light.position.x = light.position.x + ((float(rand()/float(RAND_MAX)) * 20) - (20/2.0f));
+        light.position.y = light.position.y + ((float(rand()/float(RAND_MAX)) * 20) - (20/2.0f));
+
+        //cout << shadow.dir << endl;
+        //cout << soft.dir << endl;
+        Ray soft;
+        soft.origin = intersect;
+        if (light.w == 0) { //directional light
+            soft.dir = light.position*(-1.0);
+            soft.dir = unit(soft.dir);
+        }
+        else {      //point light
+            soft.dir = light.position - intersect;
+            soft.dir = unit(soft.dir);
+        }
+        
+        float b = 2 * ( (soft.dir.x * (soft.origin.x - s.center.x)) + (soft.dir.y * (soft.origin.y - s.center.y)) + (soft.dir.z * (soft.origin.z - s.center.z)));
+        float c = pow(soft.origin.x - s.center.x,2) + pow(soft.origin.y - s.center.y,2) + pow(soft.origin.z - s.center.z,2) - pow(s.radius,2);
+        float discriminant = (pow(b,2) - 4 * c);
+
+        if (light.w == 0) { //directional light
+            if (discriminant > 0) { //2 intersections
+                float t1 = (-b + sqrt(discriminant)) / 2.0;
+                float t2 = (-b - sqrt(discriminant)) / 2.0;
+                if (t1 > 0.01f || t2 > 0.01f) {
+                    shadow_flag += 0;
+                }
+                else {
+                    shadow_flag += 1;
+                }
+            }
+            else if (discriminant == 0) { //one intersection point
+                float t = -b / 2.0;
+                if (t > 0.01f) {
+                    shadow_flag += 0;
+                }
+                else {
+                    shadow_flag+=1;
+                }
+            }
+        }
+        else { //point light
+            if (discriminant > 0) { //2 intersections
+                float t1 = (-b + sqrt(discriminant)) / 2.0;
+                float t2 = (-b - sqrt(discriminant)) / 2.0;
+                float dist1 = length(soft.dir * t1);
+                float dist2 = length(soft.dir * t2);
+                if ((t1 > 0.01f && dist1 < light_distance) || (t2 > 0.01f && dist2 < light_distance)) {
+                    shadow_flag += 0;
+                }
+                else {
+                    shadow_flag+=1;
+                }
+
+            }
+            else if (discriminant == 0) { //one intersection point
+                float t = -b / 2.0;
+                float dist = length(soft.dir * t);
+                if (t > 0.01f && dist < light_distance) {
+                    shadow_flag += 0;
+                }
+                else {
+                    shadow_flag+=1;
+                }
+            }
+        }
+    }
+    //printf("Shadow flag value : %f\n", shadow_flag);
+    return (shadow_flag/120.0f);
+
+}
+
 vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
 
     Material color = scene.materials[index];
@@ -250,7 +345,7 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
     Ib = color.ka * color.odb; //ambient
     
 
-    float lightIntensity = 1.0f / scene.lights.size();
+    float lightIntensity = 1.0f; /// scene.lights.size();
 
     //surface normal vector
     vec3 N = (intersect - sphere.center) / sphere.radius;
@@ -267,11 +362,7 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
         Ray shadow;
         shadow.origin = intersect;
 
-        vec3 vlight {
-                .x = light.position.x,
-                .y = light.position.y,
-                .z = light.position.z,
-        };
+        vec3 vlight = light.position;
 
         float shadow_flag = 1.0f;
         float light_distance = length(vlight - intersect);
@@ -285,11 +376,7 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
             shadow.dir = L;
         }
         else {      //point light
-            L = {
-                .x = (vlight.x - intersect.x),
-                .y = (vlight.y - intersect.y),
-                .z = (vlight.z - intersect.z),
-            };
+            L = vlight - intersect;
             L = unit(L);
             shadow.dir = L;
             if (light.c.x != -1.0f) { //if -1, not doing light attenuation
@@ -305,6 +392,7 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
         H = unit(H);
         
         //Check for shadow intersection
+        
 
         for (Sphere s : scene.spheres) {
             float b = 2 * ( (shadow.dir.x * (shadow.origin.x - s.center.x)) + (shadow.dir.y * (shadow.origin.y - s.center.y)) + (shadow.dir.z * (shadow.origin.z - s.center.z)));
@@ -316,13 +404,25 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
                     float t1 = (-b + sqrt(discriminant)) / 2.0;
                     float t2 = (-b - sqrt(discriminant)) / 2.0;
                     if (t1 > 0.01f || t2 > 0.01f) {
-                        shadow_flag = 0;
+                        if (scene.softshadow) {
+                            //call soft shadow
+                            shadow_flag = soft_shadow(shadow, s, light, intersect);
+                        }
+                        else {
+                            shadow_flag = 0;
+                        }
                     }
                 }
                 else if (discriminant == 0) { //one intersection point
                     float t = -b / 2.0;
                     if (t > 0.01f) {
-                        shadow_flag = 0;
+                        if (scene.softshadow) {
+                            //call soft shadow
+                            shadow_flag = soft_shadow(shadow, s, light, intersect);
+                        }
+                        else {
+                            shadow_flag = 0;
+                        }
                     }
                 }
             }
@@ -333,7 +433,13 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
                     float dist1 = length(shadow.dir * t1);
                     float dist2 = length(shadow.dir * t2);
                     if ((t1 > 0.01f && dist1 < light_distance) || (t2 > 0.01f && dist2 < light_distance)) {
-                        shadow_flag = 0;
+                        if (scene.softshadow) {
+                            //call soft shadow
+                            shadow_flag = soft_shadow(shadow, s, light, intersect);
+                        }
+                        else {
+                            shadow_flag = 0;
+                        }
                     }
 
                 }
@@ -341,13 +447,24 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
                     float t = -b / 2.0;
                     float dist = length(shadow.dir * t);
                     if (t > 0.01f && dist < light_distance) {
-                        shadow_flag = 0;
+                        if (scene.softshadow) {
+                            //call soft shadow
+                            shadow_flag = soft_shadow(shadow, s, light, intersect);
+                            printf("HERE");
+                        }
+                        else {
+                            shadow_flag = 0;
+                        }
                     }
                 }
             }
         }
-
-
+        //clamp shadow
+        //printf("Clamp after: \n");
+        //cout << shadow_flag << endl;
+        shadow_flag = min(1.0f,shadow_flag);
+        shadow_flag = max(0.0f, shadow_flag);
+        
         Ir = Ir + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
         Ig = Ig + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
         Ib = Ib + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
@@ -390,6 +507,7 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
 
         shaded_color = (shaded_color * aDepth) + (scene.depthCue.color * (1.0f - aDepth));
     }
+
     else {
         shaded_color.x = Ir;
         shaded_color.y = Ig;

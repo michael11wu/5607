@@ -64,12 +64,42 @@ Scene parse(string filename) {
             Light l;
             vec3 position;
             vec3 color;
+            vec3 c = {
+                c.x = -1,
+                c.y = -1,
+                c.z = -1,
+            };
             inputstream >> position.x >> position.y >> position.z >> l.w >> color.x >> color.y >> color.z;
             l.position = position;
             l.color = color;
+            l.c = c;
             scene.lights.push_back(l);
             printf("light: %f %f %f %f %f %f %f\n", l.position.x, l.position.y, l.position.z, l.w, l.color.x, l.color.y, l.color.z);
 
+        }
+
+        else if (keyword == "attlight") {
+            //scene.atten = true;
+            Light l;
+            vec3 position;
+            vec3 color;
+            vec3 c;
+            inputstream >> position.x >> position.y >> position.z >> l.w >> color.x >> color.y >> color.z >> c.x >> c.y >> c.z;
+            l.position = position;
+            l.color = color;
+            l.c = c;
+            scene.lights.push_back(l);
+            printf("attlight: %f %f %f %f %f %f %f %f %f %f\n", l.position.x, l.position.y, l.position.z, l.w, l.color.x, l.color.y, l.color.z, l.c.x, l.c.y, l.c.z);
+        }
+
+        else if (keyword == "depthcueing") {
+            scene.depth = true;
+            Depth depth;
+            vec3 c;
+            inputstream >> c.x >> c.y >> c.z >> depth.aMax >> depth.aMin >> depth.dMax >> depth.dMin;
+            depth.color = c;
+            scene.depthCue = depth;
+            printf("Depth Cueing: %f %f %f %f %f %f %f\n", depth.color.x, depth.color.y, depth.color.z, depth.aMax, depth.aMin, depth.dMax, depth.dMin);
         }
 
         else if (keyword == "bkgcolor") {
@@ -231,7 +261,7 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
 
     for (Light light : scene.lights) { //loop through lights
 
-        float shadow_flag = 1.0f;
+        float atten = 1.0f;
 
         //For Calculate shadow
         Ray shadow;
@@ -242,6 +272,9 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
                 .y = light.position.y,
                 .z = light.position.z,
         };
+
+        float shadow_flag = 1.0f;
+        float light_distance = length(vlight - intersect);
 
         
         vec3 L;
@@ -259,6 +292,9 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
             };
             L = unit(L);
             shadow.dir = L;
+            if (light.c.x != -1.0f) { //if -1, not doing light attenuation
+                atten = 1.0f / (light.c.x + (light.c.y * light_distance) + (light.c.z * pow(light_distance,2)));
+            }
         }
 
         //N dot L value
@@ -270,61 +306,95 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
         
         //Check for shadow intersection
 
-        // for (Sphere s : scene.spheres) {
-        //     float b = 2 * ( (shadow.dir.x * (shadow.origin.x - s.center.x)) + (shadow.dir.y * (shadow.origin.y - s.center.y)) + (shadow.dir.z * (shadow.origin.z - s.center.z)));
-        //     float c = pow(shadow.origin.x - s.center.x,2) + pow(shadow.origin.y - s.center.y,2) + pow(shadow.origin.z - s.center.z,2) - pow(s.radius,2);
-        //     float discriminant = (pow(b,2) - 4 * c);
+        for (Sphere s : scene.spheres) {
+            float b = 2 * ( (shadow.dir.x * (shadow.origin.x - s.center.x)) + (shadow.dir.y * (shadow.origin.y - s.center.y)) + (shadow.dir.z * (shadow.origin.z - s.center.z)));
+            float c = pow(shadow.origin.x - s.center.x,2) + pow(shadow.origin.y - s.center.y,2) + pow(shadow.origin.z - s.center.z,2) - pow(s.radius,2);
+            float discriminant = (pow(b,2) - 4 * c);
 
-        //     if (light.w == 0) { //directional light
-        //         if (discriminant > 0) { //2 intersections
-        //             float t1 = (-b + sqrt(discriminant)) / 2.0;
-        //             float t2 = (-b - sqrt(discriminant)) / 2.0;
-        //             if (t1 > 0.05f || t2 > 0.05f) {
-        //                 shadow_flag = 0;
-        //             }
-        //         }
-        //         else if (discriminant == 0) { //one intersection point
-        //             float t = -b / 2.0;
-        //             if (t > 0.05f) {
-        //                 shadow_flag = 0;
-        //             }
-        //         }
-        //     }
-        //     else { //point light
-        //         if (discriminant > 0) { //2 intersections
-        //             float t1 = (-b + sqrt(discriminant)) / 2.0;
-        //             float t2 = (-b - sqrt(discriminant)) / 2.0;
-        //             float dist1 = length(shadow.dir * t1);
-        //             float dist2 = length(shadow.dir * t2);
-        //             if ((t1 > 0.05f && dist1 < length(vlight - intersect)) || (t2 > 0.05f && dist2 < length(vlight - intersect))) {
-        //                 shadow_flag = 0;
-        //             }
+            if (light.w == 0) { //directional light
+                if (discriminant > 0) { //2 intersections
+                    float t1 = (-b + sqrt(discriminant)) / 2.0;
+                    float t2 = (-b - sqrt(discriminant)) / 2.0;
+                    if (t1 > 0.01f || t2 > 0.01f) {
+                        shadow_flag = 0;
+                    }
+                }
+                else if (discriminant == 0) { //one intersection point
+                    float t = -b / 2.0;
+                    if (t > 0.01f) {
+                        shadow_flag = 0;
+                    }
+                }
+            }
+            else { //point light
+                if (discriminant > 0) { //2 intersections
+                    float t1 = (-b + sqrt(discriminant)) / 2.0;
+                    float t2 = (-b - sqrt(discriminant)) / 2.0;
+                    float dist1 = length(shadow.dir * t1);
+                    float dist2 = length(shadow.dir * t2);
+                    if ((t1 > 0.01f && dist1 < light_distance) || (t2 > 0.01f && dist2 < light_distance)) {
+                        shadow_flag = 0;
+                    }
 
-        //         }
-        //         else if (discriminant == 0) { //one intersection point
-        //             float t = -b / 2.0;
-        //             float dist = length(shadow.dir * t);
-        //             if (t > 0.05f && dist < length(vlight - intersect)) {
-        //                 shadow_flag = 0;
-        //             }
-        //         }
-        //     }
-        // }
-
-        // shadow_flag = 1;
+                }
+                else if (discriminant == 0) { //one intersection point
+                    float t = -b / 2.0;
+                    float dist = length(shadow.dir * t);
+                    if (t > 0.01f && dist < light_distance) {
+                        shadow_flag = 0;
+                    }
+                }
+            }
+        }
 
 
+        Ir = Ir + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
+        Ig = Ig + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
+        Ib = Ib + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
 
-        Ir = Ir + (lightIntensity * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * max(0.0f,pow(dot(N, H),color.n))))); //red
-        Ig = Ig + (lightIntensity * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * max(0.0f,pow(dot(N, H),color.n))))); //green
-        Ib = Ib + (lightIntensity * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * max(0.0f,pow(dot(N, H),color.n))))); //blue
+        //clamp to 1
+        Ir = min(1.0f, Ir);
+        Ig = min(1.0f, Ig);
+        Ib = min(1.0f, Ib);
 
         
     }
 
-    shaded_color.x = Ir;
-    shaded_color.y = Ig;
-    shaded_color.z = Ib;
+    //printf("Ir Ig Ib: %f %f %f\n", Ir, Ig, Ib);
+
+    //if doing depthcue
+    if (scene.depth) {
+        //depth cueing
+        float obj_dist = length(scene.eye - intersect);
+        //printf("Obj Dist %f\n", obj_dist);
+        float aDepth = 1.0f;
+        if (obj_dist <= scene.depthCue.dMin) {
+            aDepth = scene.depthCue.aMax;
+        }
+        else if (obj_dist <= scene.depthCue.dMax && obj_dist >= scene.depthCue.dMin) {
+            aDepth = scene.depthCue.aMin + ((scene.depthCue.aMax - scene.depthCue.aMin) * ((scene.depthCue.dMax - obj_dist)/(scene.depthCue.dMax - scene.depthCue.dMin)));
+        }
+        else if (obj_dist >= scene.depthCue.dMax) {
+            aDepth = scene.depthCue.aMin;
+        }
+        else {
+            fprintf(stderr,"Should never get here!");
+        }
+
+
+        shaded_color.x = Ir;
+        shaded_color.y = Ig;
+        shaded_color.z = Ib;
+
+        //printf("aDepht: %f\n", aDepth);
+
+        shaded_color = (shaded_color * aDepth) + (scene.depthCue.color * (1.0f - aDepth));
+    }
+    else {
+        shaded_color.x = Ir;
+        shaded_color.y = Ig;
+        shaded_color.z = Ib;
+    }
 
     //cout << shaded_color << endl;
     return shaded_color;

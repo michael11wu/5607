@@ -37,6 +37,15 @@ struct Light {
     vec3 position;
     float w;
     vec3 color;
+    vec3 c;
+};
+
+struct Depth {
+    vec3 color;
+    float aMax;
+    float aMin;
+    float dMax;
+    float dMin;
 };
 
 // struct Cylinder {
@@ -56,6 +65,7 @@ struct Scene {
     std::vector<Sphere> spheres;
     std::vector<Material> materials;
     std::vector<Light> lights;
+    Depth depthCue;
     vec3 bkgcolor;
     vec3 eye;
     vec3 updir;
@@ -63,6 +73,8 @@ struct Scene {
     float vfov;
     int height;
     int width;
+    bool depth = false; //flag if depthcueing is being used
+    //bool atten = false;
 };
 
 #endif

@@ -121,7 +121,16 @@ Scene parse(string filename) {
 
         }
 
+        else if (keyword == "vn") {
+            vec3 v;
+            inputstream >> v.x >> v.y >> v.z;
+            scene.norm_vertices.push_back(v);
+            printf("Norm Vertices: %f %f %f\n", v.x, v.y, v.z);
+
+        }
+
         else if (keyword == "f") {
+            fgets(string,MAXCHAR, inputstream);
             Face f;
             f.index = index;
             inputstream >> f.x >> f.y >> f.z;
@@ -499,11 +508,12 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
             //Ax + By + Cz + D = 0;
             vec3 e1 = t.p1 - t.p0;
             vec3 e2 = t.p2 - t.p0;
+            vec3 n = cross(e1,e2);
             float d;
-            d = ((N.x * t.p0.x) + (N.y * t.p0.y) + (N.z * t.p0.z)) * (-1);
+            d = ((n.x * t.p0.x) + (n.y * t.p0.y) + (n.z * t.p0.z)) * (-1);
             float triangle_t;
-            float numer = (-1) * ((N.x * shadow.origin.x) + (N.y * shadow.origin.y) + (N.z * shadow.origin.z) + d);
-            float denom = ((N.x * shadow.dir.x) + (N.y * shadow.dir.y) + (N.z * shadow.dir.z));
+            float numer = (-1) * ((n.x * shadow.origin.x) + (n.y * shadow.origin.y) + (n.z * shadow.origin.z) + d);
+            float denom = ((n.x * shadow.dir.x) + (n.y * shadow.dir.y) + (n.z * shadow.dir.z));
             if (denom == 0) {
                 //no intersection
                 shadow_flag = 1;
@@ -661,6 +671,7 @@ vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect
     vec3 e1 = triangle.p1 - triangle.p0;
     vec3 e2 = triangle.p2 - triangle.p0;
     vec3 N = cross(e1,e2);
+    N = unit(N);
     //Vector in direction of viewer
     vec3 V = scene.eye - intersect;
     //vec3 V = (scene.viewdir);
@@ -787,12 +798,17 @@ vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect
         }
 
         for (Triangle t: scene.triangles) { //check if any triangles cause shadow
+
+            vec3 ee1 = t.p1 - t.p0;
+            vec3 ee2 = t.p2 - t.p0;
+            vec3 normal = cross(ee1,ee2);
+            normal = unit(normal);
             //Ax + By + Cz + D = 0;
             float d;
-            d = ((N.x * t.p0.x) + (N.y * t.p0.y) + (N.z * t.p0.z)) * (-1);
+            d = ((normal.x * t.p0.x) + (normal.y * t.p0.y) + (normal.z * t.p0.z)) * (-1);
             float triangle_t;
-            float numer = (-1) * ((N.x * shadow.origin.x) + (N.y * shadow.origin.y) + (N.z * shadow.origin.z) + d);
-            float denom = ((N.x * shadow.dir.x) + (N.y * shadow.dir.y) + (N.z * shadow.dir.z));
+            float numer = (-1) * ((normal.x * shadow.origin.x) + (normal.y * shadow.origin.y) + (normal.z * shadow.origin.z) + d);
+            float denom = ((normal.x * shadow.dir.x) + (normal.y * shadow.dir.y) + (normal.z * shadow.dir.z));
             if (denom == 0) {
                 //no intersection
                 shadow_flag = 1;
@@ -807,10 +823,10 @@ vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect
                         vec3 p = (shadow.origin + (shadow.dir * triangle_t));
                         vec3 e3 = p - t.p1;
                         vec3 e4 = p - t.p2;
-                        float A = (0.5f) * length(cross(e1,e2));
+                        float A = (0.5f) * length(cross(ee1,ee2));
                         float a = (0.5f) * length(cross(e3,e4));
-                        float b = (0.5f) * length(cross(e4,e2));
-                        float c = (0.5f) * length(cross(e1,e3));
+                        float b = (0.5f) * length(cross(e4,ee2));
+                        float c = (0.5f) * length(cross(ee1,e3));
                         float alpha = a/A;
                         float beta = b/A;
                         float gamma = c/A;
@@ -830,10 +846,10 @@ vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect
                         vec3 p = (shadow.origin + (shadow.dir * triangle_t));
                         vec3 e3 = p - t.p1;
                         vec3 e4 = p - t.p2;
-                        float A = (0.5f) * length(cross(e1,e2));
+                        float A = (0.5f) * length(cross(ee1,ee2));
                         float a = (0.5f) * length(cross(e3,e4));
-                        float b = (0.5f) * length(cross(e4,e2));
-                        float c = (0.5f) * length(cross(e1,e3));
+                        float b = (0.5f) * length(cross(e4,ee2));
+                        float c = (0.5f) * length(cross(ee1,e3));
                         float alpha = a/A;
                         float beta = b/A;
                         float gamma = c/A;
@@ -853,6 +869,7 @@ vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect
         shadow_flag = min(1.0f,shadow_flag);
         shadow_flag = max(0.0f, shadow_flag);
 
+        //printf("%f\n",  (pow(max(0.0f,dot(N, H)),color.n)));
 
         Ir += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
         Ig += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
@@ -978,6 +995,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
         vec3 e1 = triangle.p1 - triangle.p0;
         vec3 e2 = triangle.p2 - triangle.p0;
         vec3 n = cross(e1,e2);
+        n = unit(n);
 
         //Ax + By + Cz + D = 0;
         float d;

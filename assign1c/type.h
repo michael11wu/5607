@@ -77,6 +77,7 @@ struct Scene {
     //std::vector<Cylinder> cylinders;
     //std::vector<Objects> objects;
     std::vector<vec3> vertices;
+    std::vector<vec3> norm_vertices;
     std::vector<Face> faces;
     std::vector<Sphere> spheres;
     std::vector<Triangle> triangles;

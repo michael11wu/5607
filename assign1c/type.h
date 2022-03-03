@@ -9,7 +9,7 @@ struct vec3 {
     float z;
 };
 
-struct Ray{
+struct Ray {
     vec3 origin;
     vec3 dir;
 };
@@ -18,13 +18,23 @@ struct Sphere {
     vec3 center;
     float radius;
     int index;
+    int textureIndex;
+    bool texture = false;
 };
 
 struct Triangle {
     vec3 p0;
     vec3 p1;
     vec3 p2;
+    vec3 n0;
+    vec3 n1;
+    vec3 n2;
+    vec3 vt0; //THeSE ARE vec2
+    vec3 vt1;
+    vec3 vt2;
     int index;
+    int textureIndex;
+    int type;
 };
 
 struct Material {
@@ -56,28 +66,29 @@ struct Depth {
 };
 
 struct Face {
-    float x;
-    float y;
-    float z;
+    vec3 v; //indice of vertexes
+    vec3 vn; //indice of normal coords
+    vec3 vt; //indice of texture coord
     int index;
+    int textureIndex;
+    int type;
 };
 
-// struct Cylinder {
-//     vec3 center;
-//     float radius;
-//     int index;
-// };
-
-// struct Objects {
-//     std::vector<Sphere> spheres;
-//     std::vector<Cylinder> cylinders;
-// }
+struct Texture {
+    vec3** imageArray;
+    float width;
+    float height;
+};
 
 struct Scene {
     //std::vector<Cylinder> cylinders;
     //std::vector<Objects> objects;
+    std::vector<Texture> textureImages;
+    int textureHeight;
+    int textureWidth;
     std::vector<vec3> vertices;
     std::vector<vec3> norm_vertices;
+    std::vector<vec3> texture_coords;
     std::vector<Face> faces;
     std::vector<Sphere> spheres;
     std::vector<Triangle> triangles;
@@ -97,3 +108,14 @@ struct Scene {
 };
 
 #endif
+
+// struct Cylinder {
+//     vec3 center;
+//     float radius;
+//     int index;
+// };
+
+// struct Objects {
+//     std::vector<Sphere> spheres;
+//     std::vector<Cylinder> cylinders;
+// }

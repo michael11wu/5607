@@ -9,192 +9,10 @@
 #include <algorithm>
 #include <stdlib.h>
 #include <time.h>
+#include <regex>
+#include <stdio.h>
 
 using namespace std;
-
-//Parsing scene and returns a scene object
-Scene parse(string filename) {
-
-    Scene scene;
-
-    ifstream inputstream(filename, std::ios::in | std::ios::binary);
-
-    if(!inputstream.is_open()) {
-        fprintf(stderr, "Couldn't open");
-        exit(-1);
-    }
-
-    string keyword;
-    int index = -1;
-
-    while(getline(inputstream, keyword, ' ') && !(inputstream.eof())) {
-
-        //If keyword starts with a \n, cut it off
-        while (keyword.c_str()[0] == '\n') {
-            //printf("%s\n",keyword.c_str());
-            keyword = keyword.erase(0,1);
-        }
-
-
-        if (keyword == "sphere") {
-            vec3 c;
-            float r;
-
-            inputstream >> c.x >> c.y >> c.z >> r;
-
-            Sphere sphere = {
-                .center = c,
-                .radius = r,
-                .index = index,
-            };
-
-            scene.spheres.push_back(sphere);
-            printf("Sphere (Position: %f %f %f) Radius: %f Index: %d)\n",
-                sphere.center.x, sphere.center.y, sphere.center.z, sphere.radius, sphere.index);
-
-        }
-
-        else if (keyword == "mtlcolor") {
-            index++;
-            Material m;
-            inputstream >> m.odr >> m.odg >> m.odb >> m.osr >> m.osg >> m.osb >> m.ka >> m.kd >> m.ks >> m.n;
-            scene.materials.push_back(m);
-            printf("mtcolor: %f %f %f %f %f %f %f %f %f %f\n", m.odr, m.odg, m.odb, m.osr, m.osg, m.osb, m.ka, m.kd, m.ks, m.n);
-
-        }
-
-        else if (keyword == "light") {
-            Light l;
-            vec3 position;
-            vec3 color;
-            vec3 c = {
-                c.x = -1,
-                c.y = -1,
-                c.z = -1,
-            };
-            inputstream >> position.x >> position.y >> position.z >> l.w >> color.x >> color.y >> color.z;
-            l.position = position;
-            l.color = color;
-            l.c = c;
-            scene.lights.push_back(l);
-            printf("light: %f %f %f %f %f %f %f\n", l.position.x, l.position.y, l.position.z, l.w, l.color.x, l.color.y, l.color.z);
-
-        }
-
-        else if (keyword == "attlight") {
-            //scene.atten = true;
-            Light l;
-            vec3 position;
-            vec3 color;
-            vec3 c;
-            inputstream >> position.x >> position.y >> position.z >> l.w >> color.x >> color.y >> color.z >> c.x >> c.y >> c.z;
-            l.position = position;
-            l.color = color;
-            l.c = c;
-            scene.lights.push_back(l);
-            printf("attlight: %f %f %f %f %f %f %f %f %f %f\n", l.position.x, l.position.y, l.position.z, l.w, l.color.x, l.color.y, l.color.z, l.c.x, l.c.y, l.c.z);
-        }
-
-        else if (keyword == "depthcueing") {
-            scene.depth = true;
-            Depth depth;
-            vec3 c;
-            inputstream >> c.x >> c.y >> c.z >> depth.aMax >> depth.aMin >> depth.dMax >> depth.dMin;
-            depth.color = c;
-            scene.depthCue = depth;
-            printf("Depth Cueing: %f %f %f %f %f %f %f\n", depth.color.x, depth.color.y, depth.color.z, depth.aMax, depth.aMin, depth.dMax, depth.dMin);
-        }
-
-        else if (keyword == "bkgcolor") {
-            vec3 c;
-            inputstream >> c.x >> c.y >> c.z;
-            scene.bkgcolor = c;
-            printf("bkgcolor: %f %f %f\n", c.x, c.y, c.z);
-
-        }
-
-        else if (keyword == "v") {
-            vec3 v;
-            inputstream >> v.x >> v.y >> v.z;
-            scene.vertices.push_back(v);
-            printf("Vertices: %f %f %f\n", v.x, v.y, v.z);
-
-        }
-
-        else if (keyword == "vn") {
-            vec3 v;
-            inputstream >> v.x >> v.y >> v.z;
-            scene.norm_vertices.push_back(v);
-            printf("Norm Vertices: %f %f %f\n", v.x, v.y, v.z);
-
-        }
-
-        else if (keyword == "f") {
-            fgets(string,MAXCHAR, inputstream);
-            Face f;
-            f.index = index;
-            inputstream >> f.x >> f.y >> f.z;
-            scene.faces.push_back(f);
-            printf("Faces: %f %f %f\n", f.x, f.y, f.z);
-        }
-
-        else if (keyword == "eye") {
-            vec3 c;
-            inputstream >> c.x >> c.y >> c.z;
-            scene.eye = c;
-            printf("eye: %f %f %f\n", c.x, c.y, c.z);
-
-        }
-
-        else if (keyword == "viewdir") {
-            vec3 c;
-            inputstream >> c.x >> c.y >> c.z;
-            scene.viewdir= c;
-            printf("viewdir: %f %f %f\n", c.x, c.y, c.z);
-
-        }
-
-        else if (keyword == "updir") {
-            vec3 c;
-            inputstream >> c.x >> c.y >> c.z;
-            scene.updir = c;
-            printf("updir: %f %f %f\n", c.x, c.y, c.z);
-
-        }
-
-        else if (keyword == "softshadow") {
-            bool flag;
-            inputstream >> flag;
-            scene.softshadow = flag;
-            printf("Soft shadow: %d\n", flag);
-        }
-
-        else if (keyword == "imsize") {
-            int w,h;
-            inputstream >> w >> h;
-            scene.width = w;
-            scene.height = h;
-            printf("width/height: %d %d\n", w, h);
-
-        }
-
-        else if (keyword == "vfov") {
-            float fov;
-            inputstream >> fov;
-            scene.vfov = fov;
-            printf("Fov: %f\n", fov);
-
-        }
-        else {
-            fprintf(stderr,"%s ",keyword.c_str());
-            fprintf(stderr,"Word not recognized\n");
-            exit(-1);
-        }
-        std::getline(inputstream, keyword, '\n');
-    }
-    return scene;
-}
-
 
 //Functions to compute linear algebra ops
 vec3 cross(vec3 a, vec3 b) {
@@ -269,6 +87,329 @@ vec3 operator-(vec3 a, vec3 b) {
 
 ostream& operator<<(ostream& os, vec3 vect) {
     return cout << vect.x << " " << vect.y << " " << vect.z;
+}
+
+std::vector<int> textureDimension(string filename) {
+    FILE* fp = fopen(filename.c_str(),"r");
+    if (fp == NULL) {
+        fprintf(stderr,"File not found\n");
+        exit(1);
+    }
+    char line[256];
+    int height, width;
+    std::vector<int> dimen;
+    if (fgets(line, sizeof(line), fp) != NULL) {
+        if (sscanf(line,"P3 %d %d", &width, &height) ==2) { //Send values of width and height
+            dimen.push_back(width);
+            dimen.push_back(height);
+        }
+    }
+    return dimen;
+}
+//Texture Object
+vec3 ** texture_parse(string filename) {
+    FILE* fp = fopen(filename.c_str(),"r");
+    if (fp == NULL) {
+        fprintf(stderr,"File not found\n");
+        exit(1);
+    }
+    char line[256];
+    //int offset;
+    int height, width;
+    float max_val;
+    std::vector<vec3> rgb;
+    vec3 **texArray;
+    vec3 i;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        //printf("Line: %s\n",line);
+        if (scanf(line,"P3 %d %d %f", &height, &width, &max_val) == 3) { //If header line, create texArray
+            texArray = new vec3 *[height];
+            for (uint32_t i = 0; i < height; i++) {
+                texArray[i] = new vec3[width];
+            }
+            //printf("SHOULD ONLY PRINT ONCE\n");
+        }
+
+        else if (scanf(line,"%f %f %f", &i.x, &i.y, &i.z) == 3) { //If PPM is 255 255 255
+            i.x = i.x/max_val;
+            i.y = i.y/max_val;
+            i.z = i.z/max_val;
+            rgb.push_back(i);
+        }
+        // else if (sscanf(line,"%f", &i.x) == 1) { // if PPM has \n in between values
+        //     if (fgets(line, sizeof(line), fp) != NULL)
+        //     sscanf(line,"%f", &i.y);
+        //     if (fgets(line, sizeof(line), fp) != NULL)
+        //     sscanf(line,"%f", &i.z);
+        //     i.x = i.x/max_val;
+        //     i.y = i.y/max_val;
+        //     i.z = i.z/max_val;
+        //     rgb.push_back(i);
+        // }
+        // else if (sscanf(line," %f %f %f%n", &i.x, &i.y, &i.z, &offset) == 3) { // if PPM has \n in between values
+        //     printf("IN HERE");
+        //     rgb.push_back(i);
+        //     char *data = line;
+        //     data+=offset;
+        //     while (sscanf(data," %f %f %f%n", &i.x, &i.y, &i.z, &offset) == 3) {
+        //         data += offset;
+        //         rgb.push_back(i);
+        //     }
+        // }
+        else {
+            perror("Incorrect format of ppm file\n");
+            exit(1);
+        }
+    }
+
+    for (uint32_t j = 0; j < height; j++) {
+        for (uint32_t i = 0; i < width; i++) {
+            texArray[j][i] = rgb[(height*j)+i];
+        }
+    }
+    fclose(fp);
+    return texArray;
+}
+
+
+//Parsing scene and returns a scene object
+Scene parse(string filename) {
+
+    Scene scene;
+
+    ifstream inputstream(filename, std::ios::in | std::ios::binary);
+
+    if(!inputstream.is_open()) {
+        fprintf(stderr, "Couldn't open");
+        exit(-1);
+    }
+
+    string keyword;
+    int index = -1;
+    int textureIndex = -1;
+    bool texture = false;
+
+    while(getline(inputstream, keyword, ' ') && !(inputstream.eof())) {
+
+        //If keyword starts with a \n, cut it off
+        while (keyword.c_str()[0] == '\n') {
+            //printf("%s\n",keyword.c_str());
+            keyword = keyword.erase(0,1);
+        }
+
+
+        if (keyword == "sphere") {
+            vec3 c;
+            float r;
+
+            inputstream >> c.x >> c.y >> c.z >> r;
+            Sphere sphere;
+            sphere.center = c;
+            sphere.radius = r;
+            sphere.index = index;
+            sphere.textureIndex = textureIndex;
+            sphere.texture = texture;
+
+            scene.spheres.push_back(sphere);
+            printf("Sphere (Position: %f %f %f) Radius: %f Index: %d TextureIndex : %d)\n",
+                sphere.center.x, sphere.center.y, sphere.center.z, sphere.radius, sphere.index, sphere.textureIndex);
+
+        }
+
+        else if (keyword == "texture") {
+            texture = true;
+            textureIndex++;
+            string filename;
+            inputstream >> filename;
+            printf("Filename: %s\n", filename.c_str());
+            Texture newTexture;
+            newTexture.imageArray = texture_parse(filename);
+            newTexture.width = textureDimension(filename)[0];
+            newTexture.height = textureDimension(filename)[1];
+            scene.textureImages.push_back(newTexture);
+        }
+
+        else if (keyword == "mtlcolor") {
+            texture = false;
+            index++;
+            Material m;
+            inputstream >> m.odr >> m.odg >> m.odb >> m.osr >> m.osg >> m.osb >> m.ka >> m.kd >> m.ks >> m.n;
+            scene.materials.push_back(m);
+            printf("mtcolor: %f %f %f %f %f %f %f %f %f %f\n", m.odr, m.odg, m.odb, m.osr, m.osg, m.osb, m.ka, m.kd, m.ks, m.n);
+
+        }
+
+        else if (keyword == "light") {
+            Light l;
+            vec3 position;
+            vec3 color;
+            vec3 c = {
+                c.x = -1,
+                c.y = -1,
+                c.z = -1,
+            };
+            inputstream >> position.x >> position.y >> position.z >> l.w >> color.x >> color.y >> color.z;
+            l.position = position;
+            l.color = color;
+            l.c = c;
+            scene.lights.push_back(l);
+            printf("light: %f %f %f %f %f %f %f\n", l.position.x, l.position.y, l.position.z, l.w, l.color.x, l.color.y, l.color.z);
+
+        }
+
+        else if (keyword == "attlight") {
+            //scene.atten = true;
+            Light l;
+            vec3 position;
+            vec3 color;
+            vec3 c;
+            inputstream >> position.x >> position.y >> position.z >> l.w >> color.x >> color.y >> color.z >> c.x >> c.y >> c.z;
+            l.position = position;
+            l.color = color;
+            l.c = c;
+            scene.lights.push_back(l);
+            printf("attlight: %f %f %f %f %f %f %f %f %f %f\n", l.position.x, l.position.y, l.position.z, l.w, l.color.x, l.color.y, l.color.z, l.c.x, l.c.y, l.c.z);
+        }
+
+        else if (keyword == "depthcueing") {
+            scene.depth = true;
+            Depth depth;
+            vec3 c;
+            inputstream >> c.x >> c.y >> c.z >> depth.aMax >> depth.aMin >> depth.dMax >> depth.dMin;
+            depth.color = c;
+            scene.depthCue = depth;
+            printf("Depth Cueing: %f %f %f %f %f %f %f\n", depth.color.x, depth.color.y, depth.color.z, depth.aMax, depth.aMin, depth.dMax, depth.dMin);
+        }
+
+        else if (keyword == "bkgcolor") {
+            vec3 c;
+            inputstream >> c.x >> c.y >> c.z;
+            scene.bkgcolor = c;
+            printf("bkgcolor: %f %f %f\n", c.x, c.y, c.z);
+
+        }
+
+        else if (keyword == "v") {
+            vec3 v;
+            inputstream >> v.x >> v.y >> v.z;
+            scene.vertices.push_back(v);
+            printf("Vertices: %f %f %f\n", v.x, v.y, v.z);
+
+        }
+
+        else if (keyword == "vn") {
+            vec3 v;
+            inputstream >> v.x >> v.y >> v.z;
+            scene.norm_vertices.push_back(v);
+            printf("Norm Vertices: %f %f %f\n", v.x, v.y, v.z);
+
+        }
+
+        else if (keyword == "vt") {
+            vec3 vt;
+            inputstream >> vt.x >> vt.y;
+            scene.texture_coords.push_back(vt);
+            printf("Texture Coords: %f %f \n", vt.x, vt.y);
+
+        }
+
+        else if (keyword == "f") {
+            Face f;
+            std::streampos p = inputstream.tellg();
+            stringstream buffer;
+            buffer << inputstream.rdbuf();
+            inputstream.seekg(p);
+            string s = buffer.str();
+            if (s.find('\n') == string::npos) {
+                //leave it be
+            }
+            else {
+                s.erase(s.find('\n'), (s.length() - s.find('\n')));
+            }
+            f.index = index;
+            f.textureIndex = textureIndex;
+
+            if (sscanf(s.c_str(),"%f %f %f", &f.v.x, &f.v.y, &f.v.z)==3) { //f 1 2 3
+                printf("V STYLE: ");
+                printf("Faces: %f %f %f\n", f.v.x, f.v.y, f.v.z);
+                f.type = 0;
+            } 
+            else if (sscanf(s.c_str(), "%f//%f %f//%f %f//%f",&f.v.x, &f.vn.x, &f.v.y, &f.vn.y, &f.v.z, &f.vn.z) == 6) { //f 1//1 1//1 1//1
+            //success reading a face in v//n format; proceed accordingly
+                printf("v//n style: ");
+                printf("Faces: %f %f %f %f %f %f\n", f.v.x, f.vn.x, f.v.y, f.vn.y, f.v.z, f.vn.z);
+                f.type = 1;
+            } 
+            else if (sscanf(s.c_str(), "%f/%f %f/%f %f/%f",&f.v.x, &f.vt.x, &f.v.y, &f.vt.y, &f.v.z, &f.vt.z) == 6) { //f 1/1 1/1 1/1
+            //success reading a face in v/t format; proceed accordingly
+                printf("v/t style: ");
+                printf("Faces: %f %f %f %f %f %f\n", f.v.x, f.vt.x, f.v.y, f.vt.y, f.v.z, f.vt.z);
+                f.type = 2;
+            } 
+            else if (sscanf(s.c_str(), "%f/%f/%f %f/%f/%f %f/%f/%f", &f.v.x, &f.vt.x, &f.vn.x, &f.v.y, &f.vt.y, &f.vn.y, &f.v.z, &f.vt.z, &f.vn.z ) == 9) { //f 1/1/1 1/1/1 1/1/1
+                printf("v/t/n style: ");
+                printf("Faces: %f %f %f %f %f %f %f %f %f\n", f.v.x, f.vt.x, f.vn.x, f.v.y, f.vt.y, f.vn.y, f.v.z, f.vt.z, f.vn.z);
+                f.type = 3;
+            //success reading a face in v/t/n format; proceed accordingly
+            } 
+            scene.faces.push_back(f);
+        }
+
+        else if (keyword == "eye") {
+            vec3 c;
+            inputstream >> c.x >> c.y >> c.z;
+            scene.eye = c;
+            printf("eye: %f %f %f\n", c.x, c.y, c.z);
+
+        }
+
+        else if (keyword == "viewdir") {
+            vec3 c;
+            inputstream >> c.x >> c.y >> c.z;
+            scene.viewdir= c;
+            printf("viewdir: %f %f %f\n", c.x, c.y, c.z);
+
+        }
+
+        else if (keyword == "updir") {
+            vec3 c;
+            inputstream >> c.x >> c.y >> c.z;
+            scene.updir = c;
+            printf("updir: %f %f %f\n", c.x, c.y, c.z);
+
+        }
+
+        else if (keyword == "softshadow") {
+            bool flag;
+            inputstream >> flag;
+            scene.softshadow = flag;
+            printf("Soft shadow: %d\n", flag);
+        }
+
+        else if (keyword == "imsize") {
+            int w,h;
+            inputstream >> w >> h;
+            scene.width = w;
+            scene.height = h;
+            printf("width/height: %d %d\n", w, h);
+
+        }
+
+        else if (keyword == "vfov") {
+            float fov;
+            inputstream >> fov;
+            scene.vfov = fov;
+            printf("Fov: %f\n", fov);
+
+        }
+        else {
+            fprintf(stderr,"%s ",keyword.c_str());
+            fprintf(stderr,"Word not recognized\n");
+            exit(-1);
+        }
+        std::getline(inputstream, keyword, '\n');
+    }
+    return scene;
 }
 
 float soft_shadow(Ray shadow, Sphere s, Light light, vec3 intersect) {
@@ -361,9 +502,11 @@ float soft_shadow(Ray shadow, Sphere s, Light light, vec3 intersect) {
 
 }
 
-vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
+vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
 
-    Material color = scene.materials[index];
+    cout << sphere.texture << endl;
+    Material color = scene.materials[sphere.index];
+
 
     vec3 shaded_color;
 
@@ -651,27 +794,103 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
     return shaded_color;
 }
 
-vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect) {
-
-    Material color = scene.materials[index];
+vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
 
     vec3 shaded_color;
 
     float Ir;
     float Ig;
     float Ib;
-    Ir = color.ka * color.odr; //ambient
-    Ig = color.ka * color.odg; //ambient
-    Ib = color.ka * color.odb; //ambient
+    Material color;
+
+    if (triangle.type == 0 || triangle.type == 1) { //MATERIAL COLOR
+        color = scene.materials[triangle.index];
+        Ir = color.ka * color.odr; //ambient
+        Ig = color.ka * color.odg; //ambient
+        Ib = color.ka * color.odb; //ambient
+    }
     
 
     float lightIntensity = 1.0f; /// scene.lights.size();
 
     //surface normal vector
-    vec3 e1 = triangle.p1 - triangle.p0;
-    vec3 e2 = triangle.p2 - triangle.p0;
-    vec3 N = cross(e1,e2);
-    N = unit(N);
+    vec3 N;
+
+    //printf("TRIANGLE TYPE: %d", triangle.type);
+    if (triangle.type == 0) { //flat shading
+        vec3 e1 = triangle.p1 - triangle.p0;
+        vec3 e2 = triangle.p2 - triangle.p0;
+        N = cross(e1,e2);
+        N = unit(N);
+    }
+
+    else if (triangle.type == 1) { //smooth shading
+        vec3 e1 = triangle.p1 - triangle.p0;
+        vec3 e2 = triangle.p2 - triangle.p0;
+        vec3 e3 = intersect - triangle.p1;
+        vec3 e4 = intersect - triangle.p2;
+        float A = (0.5f) * length(cross(e1,e2));
+        float a = (0.5f) * length(cross(e3,e4));
+        float b = (0.5f) * length(cross(e4,e2));
+        float c = (0.5f) * length(cross(e1,e3));
+        float alpha = a/A;
+        float beta = b/A;
+        float gamma = c/A;
+        //cout << "N0: " << triangle.n0 << endl;
+        //cout << triangle.n1 << endl;
+        //cout << triangle.n2 << endl;
+        //printf("%f %f %f \n", alpha, beta, gamma);
+        N = ((triangle.n0 * alpha) + (triangle.n1 * beta) + (triangle.n2 * gamma));
+        N = unit(N);
+    }
+
+    else if (triangle.type == 2) { //texture
+        vec3 e1 = triangle.p1 - triangle.p0;
+        vec3 e2 = triangle.p2 - triangle.p0;
+        vec3 e3 = intersect - triangle.p1;
+        vec3 e4 = intersect - triangle.p2;
+        float A = (0.5f) * length(cross(e1,e2));
+        float a = (0.5f) * length(cross(e3,e4));
+        float b = (0.5f) * length(cross(e4,e2));
+        float c = (0.5f) * length(cross(e1,e3));
+        float alpha = a/A;
+        float beta = b/A;
+        float gamma = c/A;
+
+        N = cross(e1,e2);
+        N = unit(N);
+        //vt0.x = u0, vt0.y = v0
+        float u = (triangle.vt0.x * alpha) + (triangle.vt1.x * beta) + (triangle.vt2.x * gamma);
+        float v = (triangle.vt0.y * alpha) + (triangle.vt1.y * beta) + (triangle.vt2.y * gamma);
+        //printf("U and V value: %f %f\n", u,v);
+        //printf("Texture size: %d %d\n", scene.textureHeight, scene.textureWidth);
+        float i = round(u * (scene.textureImages[triangle.textureIndex].width - 1));
+        float j = round(v * (scene.textureImages[triangle.textureIndex].height - 1));
+        shaded_color = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)];
+    }
+    // else if (triangle.type == 4) { //texture
+    //     vec3 e1 = triangle.p1 - triangle.p0;
+    //     vec3 e2 = triangle.p2 - triangle.p0;
+    //     vec3 e3 = intersect - triangle.p1;
+    //     vec3 e4 = intersect - triangle.p2;
+    //     float A = (0.5f) * length(cross(e1,e2));
+    //     float a = (0.5f) * length(cross(e3,e4));
+    //     float b = (0.5f) * length(cross(e4,e2));
+    //     float c = (0.5f) * length(cross(e1,e3));
+    //     float alpha = a/A;
+    //     float beta = b/A;
+    //     float gamma = c/A;
+    //     N = ((triangle.n0 * alpha) + (triangle.n1 * beta) + (triangle.n2 * gamma));
+    //     N = unit(N);
+    //     //vt0.x = u0, vt0.y = v0
+    //     float u = (triangle.vt0.x * alpha) + (triangle.vt1.x * beta) + (triangle.vt2.x * gamma);
+    //     float v = (triangle.vt0.y * alpha) + (triangle.vt1.y * beta) + (triangle.vt2.y * gamma);
+    //     //printf("U and V value: %f %f\n", u,v);
+    //     //printf("Texture size: %d %d\n", scene.textureHeight, scene.textureWidth);
+    //     float i = round(u * (scene.textureWidth - 1));
+    //     float j = round(v * (scene.textureHeight - 1));
+    //     return scene.textureImage[int(j)][int(i)];
+    // }
     //Vector in direction of viewer
     vec3 V = scene.eye - intersect;
     //vec3 V = (scene.viewdir);
@@ -870,10 +1089,18 @@ vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect
         shadow_flag = max(0.0f, shadow_flag);
 
         //printf("%f\n",  (pow(max(0.0f,dot(N, H)),color.n)));
+        
+        if (triangle.type == 2 || triangle.type == 3) { //texture
+            shaded_color.x += shadow_flag * lightIntensity * atten * shaded_color.x;
+            shaded_color.y += shadow_flag * lightIntensity * atten * shaded_color.y;
+            shaded_color.z += shadow_flag * lightIntensity * atten * shaded_color.z;
+        }
 
-        Ir += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
-        Ig += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
-        Ib += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
+        else { //no texture
+            Ir += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
+            Ig += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
+            Ib += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
+        }
     }
 
     //if doing depthcue
@@ -896,14 +1123,25 @@ vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect
         }
 
         //clamp to 1
-        Ir = min(1.0f, Ir);
-        Ig = min(1.0f, Ig);
-        Ib = min(1.0f, Ib);
+
+        if (triangle.type == 2 || triangle.type == 3) { //texture
+            shaded_color.x = min(1.0f, shaded_color.x);
+            shaded_color.y = min(1.0f, shaded_color.y);
+            shaded_color.z = min(1.0f, shaded_color.z);
+        }
+
+        else { //no texture
+
+            Ir = min(1.0f, Ir);
+            Ig = min(1.0f, Ig);
+            Ib = min(1.0f, Ib);
 
 
-        shaded_color.x = Ir;
-        shaded_color.y = Ig;
-        shaded_color.z = Ib;
+            shaded_color.x = Ir;
+            shaded_color.y = Ig;
+            shaded_color.z = Ib;
+
+        }
 
         //printf("aDepht: %f\n", aDepth);
 
@@ -912,14 +1150,22 @@ vec3 shade_rayTriangle(int index, Scene scene, Triangle triangle, vec3 intersect
 
     else {
 
-        //clamp to 1
-        Ir = min(1.0f, Ir);
-        Ig = min(1.0f, Ig);
-        Ib = min(1.0f, Ib);
+        if (triangle.type == 2 || triangle.type == 3) { //texture
+            shaded_color.x = min(1.0f, shaded_color.x);
+            shaded_color.y = min(1.0f, shaded_color.y);
+            shaded_color.z = min(1.0f, shaded_color.z);
+        }
 
-        shaded_color.x = Ir;
-        shaded_color.y = Ig;
-        shaded_color.z = Ib;
+        //clamp to 1
+        else {
+            Ir = min(1.0f, Ir);
+            Ig = min(1.0f, Ig);
+            Ib = min(1.0f, Ib);
+
+            shaded_color.x = Ir;
+            shaded_color.y = Ig;
+            shaded_color.z = Ib;
+        }
     }
 
     //cout << shaded_color << endl;
@@ -932,13 +1178,9 @@ vec3 trace_ray(Ray ray, Scene scene) {
     bool intersect = false;
     bool inter_triangle = false;
 
-    Sphere closest_sphere {
-        .center = vec3 {0,0,0},
-        .radius = 0,
-        .index = 0,
-    };
+    Sphere closest_sphere;
 
-    float closest_t = 99;
+    float closest_t = 100000;
 
     //FInd closest object by finding the sphere with the closest t with the ray
     for (Sphere sphere: scene.spheres) {
@@ -1046,11 +1288,11 @@ vec3 trace_ray(Ray ray, Scene scene) {
         intersection_point.z =(ray.origin.z + ray.dir.z*closest_t);
 
         if (inter_triangle) { //calculate triangle shading
-            return shade_rayTriangle(closest_triangle.index, scene, closest_triangle, intersection_point);
+            return shade_rayTriangle(scene, closest_triangle, intersection_point);
         }
 
         else { //sphere shading
-            return shade_ray(closest_sphere.index, scene, closest_sphere, intersection_point);
+            return shade_ray(scene, closest_sphere, intersection_point);
         }
     }
 }
@@ -1077,21 +1319,102 @@ int main(int argc, char* argv[]) {
 
     //Create the triangles
     for (int i = 0; i < scene.faces.size(); i ++) {
-        cout << scene.faces[i].x << scene.faces[i].y << scene.faces[i].z << endl;
-        vec3 p0;
-        vec3 p1;
-        vec3 p2;
-        p0 = scene.vertices[scene.faces[i].x-1];
-        p1 = scene.vertices[scene.faces[i].y-1];
-        p2 = scene.vertices[scene.faces[i].z-1];
+        if (scene.faces[i].type == 0) { //f 0 0 0
+            printf("TYPE 0\n");
+            vec3 p0, p1, p2;
+            p0 = scene.vertices[scene.faces[i].v.x-1];
+            p1 = scene.vertices[scene.faces[i].v.y-1];
+            p2 = scene.vertices[scene.faces[i].v.z-1];
 
-        Triangle t {
-            .p0 = p0,
-            .p1 = p1,
-            .p2 = p2,
-            .index = scene.faces[i].index,
-        };
-        scene.triangles.push_back(t);
+            Triangle t {
+                .p0 = p0,
+                .p1 = p1,
+                .p2 = p2,
+                .index = scene.faces[i].index,
+                .textureIndex = scene.faces[i].textureIndex,
+                .type = scene.faces[i].type,
+            };
+            scene.triangles.push_back(t);
+        }
+        else if (scene.faces[i].type == 1) { //f 0//1 0//1 0//1 smooth shaded untexture v//n
+            vec3 p0, p1, p2;
+            vec3 n0, n1, n2;
+            p0 = scene.vertices[scene.faces[i].v.x-1];
+            p1 = scene.vertices[scene.faces[i].v.y-1];
+            p2 = scene.vertices[scene.faces[i].v.z-1];
+            printf("TYPE 1 \n");
+            n0 = scene.norm_vertices[scene.faces[i].vn.x-1];
+            n1 = scene.norm_vertices[scene.faces[i].vn.y-1];
+            n2 = scene.norm_vertices[scene.faces[i].vn.z-1];
+
+            Triangle t {
+                .p0 = p0,
+                .p1 = p1,
+                .p2 = p2,
+                .n0 = n0,
+                .n1 = n1,
+                .n2 = n2,
+                .index = scene.faces[i].index,
+                .textureIndex = scene.faces[i].textureIndex,
+                .type = scene.faces[i].type,
+            };
+            scene.triangles.push_back(t);
+        }
+        else if (scene.faces[i].type == 2) { //f 0/1 0/1 0/1 texture w/o smooth-shading v/t
+            printf("TYPE 2 \n");
+            vec3 p0, p1, p2;
+            vec3 vt0, vt1, vt2;
+            p0 = scene.vertices[scene.faces[i].v.x-1];
+            p1 = scene.vertices[scene.faces[i].v.y-1];
+            p2 = scene.vertices[scene.faces[i].v.z-1];
+            vt0 = scene.texture_coords[scene.faces[i].vt.x-1];
+            vt1 = scene.texture_coords[scene.faces[i].vt.y-1];
+            vt2 = scene.texture_coords[scene.faces[i].vt.z-1];
+
+            Triangle t {
+                .p0 = p0,
+                .p1 = p1,
+                .p2 = p2,
+                .vt0 = vt0,
+                .vt1 = vt1,
+                .vt2 = vt2,
+                .index = scene.faces[i].index,
+                .textureIndex = scene.faces[i].textureIndex,
+                .type = scene.faces[i].type,
+            };
+            scene.triangles.push_back(t);
+        }
+        else if (scene.faces[i].type == 3) { //f 0/1/1 0/1/1 0/1/1 smooth shaded texture triangle v/t/n
+            printf("TYPE 3 \n");
+            vec3 p0, p1, p2;
+            vec3 n0, n1, n2; 
+            vec3 vt0, vt1, vt2;
+            p0 = scene.vertices[scene.faces[i].v.x-1];
+            p1 = scene.vertices[scene.faces[i].v.y-1];
+            p2 = scene.vertices[scene.faces[i].v.z-1];
+            n0 = scene.norm_vertices[scene.faces[i].vn.x-1];
+            n1 = scene.norm_vertices[scene.faces[i].vn.y-1];
+            n2 = scene.norm_vertices[scene.faces[i].vn.z-1];
+            vt0 = scene.texture_coords[scene.faces[i].vt.x-1];
+            vt1 = scene.texture_coords[scene.faces[i].vt.y-1];
+            vt2 = scene.texture_coords[scene.faces[i].vt.z-1];
+
+            Triangle t {
+                .p0 = p0,
+                .p1 = p1,
+                .p2 = p2,
+                .n0 = n0,
+                .n1 = n1,
+                .n2 = n2,
+                .vt0 = vt0,
+                .vt1 = vt1,
+                .vt2 = vt2,
+                .index = scene.faces[i].index,
+                .textureIndex = scene.faces[i].textureIndex,
+                .type = scene.faces[i].type,
+            };
+            scene.triangles.push_back(t);
+        }
     }
 
 
@@ -1169,14 +1492,14 @@ int main(int argc, char* argv[]) {
     string outputfile = argv[2];
     ofstream output_stream(outputfile, ios::out | ios::binary);
 
-    output_stream << "P3\n"
+    output_stream << "P3 "
     << scene.width << " "
-    << scene.height << "\n"
+    << scene.height << " "
     << 255 << "\n";
 
     for (int j = 0; j < scene.height; j++) {
         for (int i = 0; i < scene.width; i++) {
-            output_stream << imageArray[j][i].x*255 << " " << imageArray[j][i].y*255 << " " << imageArray[j][i].z*255 << " ";
+            output_stream << imageArray[j][i].x*255 << " " << imageArray[j][i].y*255 << " " << imageArray[j][i].z*255 << "\n";
         }
     }
 

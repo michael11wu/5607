@@ -452,6 +452,7 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
                         }
                     }
                     else {
+                        //printf("Intersect with itself or not in view\n");
                         //shadow_flag += 1;
                     }
 
@@ -471,6 +472,7 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
                         }
                     }
                     else {
+                        printf("Intersect with itself or not in view\n");
                         //shadow_flag += 1;
                     }
                 }
@@ -487,9 +489,9 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
                 //cout << shadow_flag << endl;
                 // printf("=================\n");
                 // printf("%f %f %f %f %f %f %f\n", shadow_flag, lightIntensity, atten, (color.kd * color.odr), cosDiffuse,(color.ks * color.osr), pow(max(-0.000000000001f,dot(N, H)),color.n) );
-                // printf("R: %f\n",(Ir + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-                // printf("G: %f\n",(Ig + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-                // printf("b: %f\n",(Ib + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                printf("R: %f\n",(Ir + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                printf("G: %f\n",(Ig + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                printf("b: %f\n",(Ib + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
             }
         }
         else {
@@ -499,6 +501,10 @@ vec3 shade_ray(int index, Scene scene, Sphere sphere, vec3 intersect) {
         Ir += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
         Ig += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
         Ib += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
+
+        if (shadow_flag < 1) {
+            cout << "FINAL IG COLOR: " << Ig << endl;
+        }
     }
 
     //printf("Ir Ig Ib: %f %f %f\n", Ir, Ig, Ib);

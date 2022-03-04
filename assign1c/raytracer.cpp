@@ -95,7 +95,7 @@ std::vector<int> textureDimension(string filename) {
         fprintf(stderr,"File not found\n");
         exit(1);
     }
-    char line[256];
+    char line[20];
     int height, width;
     std::vector<int> dimen;
     if (fgets(line, sizeof(line), fp) != NULL) {
@@ -113,58 +113,30 @@ vec3 ** texture_parse(string filename) {
         fprintf(stderr,"File not found\n");
         exit(1);
     }
-    char line[256];
     //int offset;
     int height, width;
     float max_val;
     std::vector<vec3> rgb;
     vec3 **texArray;
     vec3 i;
-    while (fgets(line, sizeof(line), fp) != NULL) {
-        //printf("Line: %s\n",line);
-        if (scanf(line,"P3 %d %d %f", &height, &width, &max_val) == 3) { //If header line, create texArray
-            texArray = new vec3 *[height];
+    if (fscanf(fp,"P3 %d %d %f", &width, &height, &max_val) == 3) {
+        //printf("HEADER: P3 %d %d %f\n", width, height, max_val);
+        texArray = new vec3 *[height];
             for (uint32_t i = 0; i < height; i++) {
                 texArray[i] = new vec3[width];
             }
-            //printf("SHOULD ONLY PRINT ONCE\n");
-        }
-
-        else if (scanf(line,"%f %f %f", &i.x, &i.y, &i.z) == 3) { //If PPM is 255 255 255
-            i.x = i.x/max_val;
-            i.y = i.y/max_val;
-            i.z = i.z/max_val;
-            rgb.push_back(i);
-        }
-        // else if (sscanf(line,"%f", &i.x) == 1) { // if PPM has \n in between values
-        //     if (fgets(line, sizeof(line), fp) != NULL)
-        //     sscanf(line,"%f", &i.y);
-        //     if (fgets(line, sizeof(line), fp) != NULL)
-        //     sscanf(line,"%f", &i.z);
-        //     i.x = i.x/max_val;
-        //     i.y = i.y/max_val;
-        //     i.z = i.z/max_val;
-        //     rgb.push_back(i);
-        // }
-        // else if (sscanf(line," %f %f %f%n", &i.x, &i.y, &i.z, &offset) == 3) { // if PPM has \n in between values
-        //     printf("IN HERE");
-        //     rgb.push_back(i);
-        //     char *data = line;
-        //     data+=offset;
-        //     while (sscanf(data," %f %f %f%n", &i.x, &i.y, &i.z, &offset) == 3) {
-        //         data += offset;
-        //         rgb.push_back(i);
-        //     }
-        // }
-        else {
-            perror("Incorrect format of ppm file\n");
-            exit(1);
-        }
+    }
+    while (fscanf(fp,"%f %f %f", &i.x, &i.y, &i.z) == 3) {
+        //printf("RGB: %f %f %f\n", i.x, i.y, i.z);
+        i.x = i.x/max_val;
+        i.y = i.y/max_val;
+        i.z = i.z/max_val;
+        rgb.push_back(i);
     }
 
     for (uint32_t j = 0; j < height; j++) {
         for (uint32_t i = 0; i < width; i++) {
-            texArray[j][i] = rgb[(height*j)+i];
+            texArray[j][i] = rgb[(width*j)+i];
         }
     }
     fclose(fp);
@@ -504,7 +476,6 @@ float soft_shadow(Ray shadow, Sphere s, Light light, vec3 intersect) {
 
 vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
 
-    cout << sphere.texture << endl;
     Material color = scene.materials[sphere.index];
 
 
@@ -518,7 +489,7 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
     Ib = color.ka * color.odb; //ambient
     
 
-    float lightIntensity = 1.0f; /// scene.lights.size();
+    vec3 lightIntensity; //
 
     //surface normal vector
     vec3 N = (intersect - sphere.center) / sphere.radius;
@@ -529,6 +500,8 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
     for (Light light : scene.lights) { //loop through lights
 
         float atten = 1.0f;
+
+        lightIntensity = light.color;
 
         //For Calculate shadow
         Ray shadow;
@@ -724,18 +697,18 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
                 //cout << shadow_flag << endl;
                 // printf("=================\n");
                 // printf("%f %f %f %f %f %f %f\n", shadow_flag, lightIntensity, atten, (color.kd * color.odr), cosDiffuse,(color.ks * color.osr), pow(max(-0.000000000001f,dot(N, H)),color.n) );
-                printf("R: %f\n",(Ir + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-                printf("G: %f\n",(Ig + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-                printf("b: %f\n",(Ib + (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                printf("R: %f\n",(Ir + (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                printf("G: %f\n",(Ig + (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                printf("b: %f\n",(Ib + (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
             }
         }
         else {
             //cout << shadow_flag <<endl;
         }
 
-        Ir += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
-        Ig += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
-        Ib += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
+        Ir += (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
+        Ig += (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
+        Ib += (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
 
         if (shadow_flag < 1) {
             //cout << "FINAL IG COLOR: " << Ig << endl;
@@ -811,7 +784,7 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
     }
     
 
-    float lightIntensity = 1.0f; /// scene.lights.size();
+    vec3 lightIntensity; /// scene.lights.size();
 
     //surface normal vector
     vec3 N;
@@ -866,6 +839,14 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
         //printf("Texture size: %d %d\n", scene.textureHeight, scene.textureWidth);
         float i = round(u * (scene.textureImages[triangle.textureIndex].width - 1));
         float j = round(v * (scene.textureImages[triangle.textureIndex].height - 1));
+
+        //make sure it doesn't go out of bounds
+        if (i == scene.textureImages[triangle.textureIndex].width) {
+            i -= 1;
+        }
+        if (j == scene.textureImages[triangle.textureIndex].height) {
+            j-=1;
+        }
         shaded_color = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)];
     }
     // else if (triangle.type == 4) { //texture
@@ -898,6 +879,8 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
     for (Light light : scene.lights) { //loop through lights
 
         float atten = 1.0f;
+
+        lightIntensity = light.color;
 
         //For Calculate shadow
         Ray shadow;
@@ -1091,15 +1074,15 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
         //printf("%f\n",  (pow(max(0.0f,dot(N, H)),color.n)));
         
         if (triangle.type == 2 || triangle.type == 3) { //texture
-            shaded_color.x += shadow_flag * lightIntensity * atten * shaded_color.x;
-            shaded_color.y += shadow_flag * lightIntensity * atten * shaded_color.y;
-            shaded_color.z += shadow_flag * lightIntensity * atten * shaded_color.z;
+            shaded_color.x += shadow_flag * lightIntensity.x * atten * shaded_color.x;
+            shaded_color.y += shadow_flag * lightIntensity.y * atten * shaded_color.y;
+            shaded_color.z += shadow_flag * lightIntensity.z * atten * shaded_color.z;
         }
 
         else { //no texture
-            Ir += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
-            Ig += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
-            Ib += (shadow_flag * lightIntensity * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
+            Ir += (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
+            Ig += (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
+            Ib += (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
         }
     }
 
@@ -1505,6 +1488,9 @@ int main(int argc, char* argv[]) {
 
     //Delete
     delete[] imageArray;
+    for (int i = 0; i < scene.textureImages.size(); i ++) {
+        delete[] scene.textureImages[i].imageArray;
+    }
 
 
 }

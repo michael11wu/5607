@@ -3,6 +3,8 @@
 
 #include <vector>
 
+const float pi = 3.141592653589793238f;
+
 struct vec3 {
     float x;
     float y;

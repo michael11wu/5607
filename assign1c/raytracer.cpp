@@ -14,6 +14,8 @@
 
 using namespace std;
 
+
+
 //Functions to compute linear algebra ops
 vec3 cross(vec3 a, vec3 b) {
     vec3 u{
@@ -202,7 +204,6 @@ Scene parse(string filename) {
         }
 
         else if (keyword == "mtlcolor") {
-            texture = false;
             index++;
             Material m;
             inputstream >> m.odr >> m.odg >> m.odb >> m.osr >> m.osg >> m.osb >> m.ka >> m.kd >> m.ks >> m.n;
@@ -476,17 +477,74 @@ float soft_shadow(Ray shadow, Sphere s, Light light, vec3 intersect) {
 
 vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
 
-    Material color = scene.materials[sphere.index];
-
-
     vec3 shaded_color;
 
     float Ir;
     float Ig;
     float Ib;
-    Ir = color.ka * color.odr; //ambient
-    Ig = color.ka * color.odg; //ambient
-    Ib = color.ka * color.odb; //ambient
+
+    Material color;
+
+    if (sphere.index > -1) {
+        color = scene.materials[sphere.index];
+        //printf("Sphere index: %d\n", sphere.index);
+        Ir = color.ka * color.odr; //ambient
+        Ig = color.ka * color.odg; //ambient
+        Ib = color.ka * color.odb; //ambient
+    }
+
+
+    if (sphere.texture) {   //apply texture to spehre
+        float Nx = (intersect.x - sphere.center.x)/ sphere.radius;
+        float Ny = (intersect.y - sphere.center.y)/ sphere.radius;
+        float Nz = (intersect.z - sphere.center.z)/ sphere.radius;
+        
+        //flipped Ny and Nz so Y axis has the old Z axis since View dir is down Z
+
+        //make sure Ny is in bounds for acos
+        if (Ny <= -1.0000000000000000f) {
+            printf("Ny %f\n", Ny);
+            Ny += 0.00001f;
+            printf("Ny %f\n", Ny);
+        }
+        if (Ny >= 1.00000000000000000f) {
+            Ny -= 0.00001f;
+        }
+
+
+        float φ = acosf(Ny);
+        //printf("Phi: %f\n", φ);
+        float Θ = atan2f((Nz),(Nx));
+
+        //printf("Phi Theta %f %f\n",φ,Θ);
+        //rotate the longitude value 180 degrees
+        Θ = Θ * -0.5;
+
+        //Make it range on the value of 1
+        float v = φ / pi; //v
+        float u = (Θ + pi) / (2.0f * pi); //u
+        
+        //printf("U V: %f %f\n", u,v);
+
+        float i = round(u * (scene.textureImages[sphere.textureIndex].width - 1));
+        float j = round(v * (scene.textureImages[sphere.textureIndex].height - 1));
+
+        //make sure it doesn't go out of bounds
+        if (i == scene.textureImages[sphere.textureIndex].width) {
+            i -= 1;
+        }
+        if (j == scene.textureImages[sphere.textureIndex].height) {
+            j-=1;
+        }
+        //printf("Scene texture Widht and height: %f %f\n",scene.textureImages[sphere.textureIndex].width, scene.textureImages[sphere.textureIndex].height );
+        //printf("I J: %f %f\n",i,j);
+        color.odr = scene.textureImages[sphere.textureIndex].imageArray[int(j)][int(i)].x;
+        color.odg = scene.textureImages[sphere.textureIndex].imageArray[int(j)][int(i)].y;
+        color.odb = scene.textureImages[sphere.textureIndex].imageArray[int(j)][int(i)].z;
+        Ir = color.ka * color.odr; //ambient
+        Ig = color.ka * color.odg; //ambient
+        Ib = color.ka * color.odb; //ambient
+    }
     
 
     vec3 lightIntensity; //
@@ -697,22 +755,22 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
                 //cout << shadow_flag << endl;
                 // printf("=================\n");
                 // printf("%f %f %f %f %f %f %f\n", shadow_flag, lightIntensity, atten, (color.kd * color.odr), cosDiffuse,(color.ks * color.osr), pow(max(-0.000000000001f,dot(N, H)),color.n) );
-                printf("R: %f\n",(Ir + (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-                printf("G: %f\n",(Ig + (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-                printf("b: %f\n",(Ib + (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                //printf("R: %f\n",(Ir + (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                //printf("G: %f\n",(Ig + (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
+                //printf("b: %f\n",(Ib + (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
             }
         }
         else {
             //cout << shadow_flag <<endl;
+        }
+        if (shadow_flag < 1) {
+            //cout << "FINAL IG COLOR: " << Ig << endl;
         }
 
         Ir += (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
         Ig += (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
         Ib += (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
 
-        if (shadow_flag < 1) {
-            //cout << "FINAL IG COLOR: " << Ig << endl;
-        }
     }
 
     //printf("Ir Ig Ib: %f %f %f\n", Ir, Ig, Ib);
@@ -737,6 +795,7 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
         }
 
         //clamp to 1
+
         Ir = min(1.0f, Ir);
         Ig = min(1.0f, Ig);
         Ib = min(1.0f, Ib);
@@ -776,7 +835,7 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
     float Ib;
     Material color;
 
-    if (triangle.type == 0 || triangle.type == 1) { //MATERIAL COLOR
+    if (triangle.index > -1) { //MATERIAL COLOR
         color = scene.materials[triangle.index];
         Ir = color.ka * color.odr; //ambient
         Ig = color.ka * color.odg; //ambient
@@ -841,37 +900,56 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
         float j = round(v * (scene.textureImages[triangle.textureIndex].height - 1));
 
         //make sure it doesn't go out of bounds
+
         if (i == scene.textureImages[triangle.textureIndex].width) {
             i -= 1;
         }
         if (j == scene.textureImages[triangle.textureIndex].height) {
             j-=1;
         }
-        shaded_color = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)];
+        color.odr = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].x;
+        color.odg = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].y;
+        color.odb = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].z;
+        Ir = color.ka * color.odr; //ambient
+        Ig = color.ka * color.odg; //ambient
+        Ib = color.ka * color.odb; //ambient
     }
-    // else if (triangle.type == 4) { //texture
-    //     vec3 e1 = triangle.p1 - triangle.p0;
-    //     vec3 e2 = triangle.p2 - triangle.p0;
-    //     vec3 e3 = intersect - triangle.p1;
-    //     vec3 e4 = intersect - triangle.p2;
-    //     float A = (0.5f) * length(cross(e1,e2));
-    //     float a = (0.5f) * length(cross(e3,e4));
-    //     float b = (0.5f) * length(cross(e4,e2));
-    //     float c = (0.5f) * length(cross(e1,e3));
-    //     float alpha = a/A;
-    //     float beta = b/A;
-    //     float gamma = c/A;
-    //     N = ((triangle.n0 * alpha) + (triangle.n1 * beta) + (triangle.n2 * gamma));
-    //     N = unit(N);
-    //     //vt0.x = u0, vt0.y = v0
-    //     float u = (triangle.vt0.x * alpha) + (triangle.vt1.x * beta) + (triangle.vt2.x * gamma);
-    //     float v = (triangle.vt0.y * alpha) + (triangle.vt1.y * beta) + (triangle.vt2.y * gamma);
-    //     //printf("U and V value: %f %f\n", u,v);
-    //     //printf("Texture size: %d %d\n", scene.textureHeight, scene.textureWidth);
-    //     float i = round(u * (scene.textureWidth - 1));
-    //     float j = round(v * (scene.textureHeight - 1));
-    //     return scene.textureImage[int(j)][int(i)];
-    // }
+    else if (triangle.type == 3) { //texture
+        vec3 e1 = triangle.p1 - triangle.p0;
+        vec3 e2 = triangle.p2 - triangle.p0;
+        vec3 e3 = intersect - triangle.p1;
+        vec3 e4 = intersect - triangle.p2;
+        float A = (0.5f) * length(cross(e1,e2));
+        float a = (0.5f) * length(cross(e3,e4));
+        float b = (0.5f) * length(cross(e4,e2));
+        float c = (0.5f) * length(cross(e1,e3));
+        float alpha = a/A;
+        float beta = b/A;
+        float gamma = c/A;
+        N = ((triangle.n0 * alpha) + (triangle.n1 * beta) + (triangle.n2 * gamma));
+        N = unit(N);
+        //vt0.x = u0, vt0.y = v0
+        float u = (triangle.vt0.x * alpha) + (triangle.vt1.x * beta) + (triangle.vt2.x * gamma);
+        float v = (triangle.vt0.y * alpha) + (triangle.vt1.y * beta) + (triangle.vt2.y * gamma);
+        //printf("U and V value: %f %f\n", u,v);
+        //printf("Texture size: %d %d\n", scene.textureHeight, scene.textureWidth);
+        float i = round(u * (scene.textureImages[triangle.textureIndex].width - 1));
+        float j = round(v * (scene.textureImages[triangle.textureIndex].height - 1));
+
+        if (i == scene.textureImages[triangle.textureIndex].width) {
+            i -= 1;
+        }
+        if (j == scene.textureImages[triangle.textureIndex].height) {
+            j-=1;
+        }
+
+        color.odr = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].x;
+        color.odg = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].y;
+        color.odb = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].z;
+        Ir = color.ka * color.odr; //ambient
+        Ig = color.ka * color.odg; //ambient
+        Ib = color.ka * color.odb; //ambient
+    }
     //Vector in direction of viewer
     vec3 V = scene.eye - intersect;
     //vec3 V = (scene.viewdir);
@@ -1033,7 +1111,8 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
                         float beta = b/A;
                         float gamma = c/A;
                         if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.998) {
+                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.999) {
+                                //printf("SHADOW\n");
                                 shadow_flag = 0;
                             }
                             else {
@@ -1056,7 +1135,8 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
                         float beta = b/A;
                         float gamma = c/A;
                         if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.998) {
+                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.999) {
+                                //printf("SHADOW\n");
                                 shadow_flag = 0;
                             }
                             else {
@@ -1072,18 +1152,10 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
         shadow_flag = max(0.0f, shadow_flag);
 
         //printf("%f\n",  (pow(max(0.0f,dot(N, H)),color.n)));
-        
-        if (triangle.type == 2 || triangle.type == 3) { //texture
-            shaded_color.x += shadow_flag * lightIntensity.x * atten * shaded_color.x;
-            shaded_color.y += shadow_flag * lightIntensity.y * atten * shaded_color.y;
-            shaded_color.z += shadow_flag * lightIntensity.z * atten * shaded_color.z;
-        }
 
-        else { //no texture
-            Ir += (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
-            Ig += (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
-            Ib += (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
-        }
+        Ir += (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n)))); //red
+        Ig += (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odg) * (cosDiffuse)) + ((color.ks * color.osg) * pow(max(0.0f,dot(N, H)),color.n)))); //green
+        Ib += (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odb) * (cosDiffuse)) + ((color.ks * color.osb) * pow(max(0.0f,dot(N, H)),color.n)))); //blue
     }
 
     //if doing depthcue
@@ -1107,24 +1179,14 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
 
         //clamp to 1
 
-        if (triangle.type == 2 || triangle.type == 3) { //texture
-            shaded_color.x = min(1.0f, shaded_color.x);
-            shaded_color.y = min(1.0f, shaded_color.y);
-            shaded_color.z = min(1.0f, shaded_color.z);
-        }
-
-        else { //no texture
-
-            Ir = min(1.0f, Ir);
-            Ig = min(1.0f, Ig);
-            Ib = min(1.0f, Ib);
+        Ir = min(1.0f, Ir);
+        Ig = min(1.0f, Ig);
+        Ib = min(1.0f, Ib);
 
 
-            shaded_color.x = Ir;
-            shaded_color.y = Ig;
-            shaded_color.z = Ib;
-
-        }
+        shaded_color.x = Ir;
+        shaded_color.y = Ig;
+        shaded_color.z = Ib;
 
         //printf("aDepht: %f\n", aDepth);
 
@@ -1132,23 +1194,13 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
     }
 
     else {
+        Ir = min(1.0f, Ir);
+        Ig = min(1.0f, Ig);
+        Ib = min(1.0f, Ib);
 
-        if (triangle.type == 2 || triangle.type == 3) { //texture
-            shaded_color.x = min(1.0f, shaded_color.x);
-            shaded_color.y = min(1.0f, shaded_color.y);
-            shaded_color.z = min(1.0f, shaded_color.z);
-        }
-
-        //clamp to 1
-        else {
-            Ir = min(1.0f, Ir);
-            Ig = min(1.0f, Ig);
-            Ib = min(1.0f, Ib);
-
-            shaded_color.x = Ir;
-            shaded_color.y = Ig;
-            shaded_color.z = Ib;
-        }
+        shaded_color.x = Ir;
+        shaded_color.y = Ig;
+        shaded_color.z = Ib;
     }
 
     //cout << shaded_color << endl;
@@ -1247,7 +1299,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
                 float beta = b/A;
                 float gamma = c/A;
                 if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                    if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.998) {
+                    if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.999) {
                         closest_t = triangle_t;
                         intersect = true;
                         closest_triangle = triangle;
@@ -1416,7 +1468,7 @@ int main(int argc, char* argv[]) {
 
     //convert to radians
 
-    float fov_r = (scene.vfov/2.0) * (3.14/180.0);
+    float fov_r = (scene.vfov/2.0) * (pi/180.0);
     //cout<< fov_r << endl;
     float h_view = 2 * viewdist * tanf(fov_r);
     //cout << h_view << endl;

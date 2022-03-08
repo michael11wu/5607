@@ -39,6 +39,14 @@ struct Triangle {
     int type;
 };
 
+struct Cylinder {
+    vec3 center;
+    vec3 dir;
+    float radius;
+    float length;
+    int index;
+};
+
 struct Material {
     float odr;
     float odg;
@@ -93,6 +101,7 @@ struct Scene {
     std::vector<vec3> texture_coords;
     std::vector<Face> faces;
     std::vector<Sphere> spheres;
+    std::vector<Cylinder> cylinders;
     std::vector<Triangle> triangles;
     std::vector<Material> materials;
     std::vector<Light> lights;
@@ -110,12 +119,6 @@ struct Scene {
 };
 
 #endif
-
-// struct Cylinder {
-//     vec3 center;
-//     float radius;
-//     int index;
-// };
 
 // struct Objects {
 //     std::vector<Sphere> spheres;

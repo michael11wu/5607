@@ -14,8 +14,6 @@
 
 using namespace std;
 
-
-
 //Functions to compute linear algebra ops
 vec3 cross(vec3 a, vec3 b) {
     vec3 u{
@@ -198,7 +196,7 @@ Scene parse(string filename) {
             inputstream >> center.x >> center.y >> center.z >> dir.x >> dir.y >> dir.z >> radius >> length;
             Cylinder cylinder = {
                 .center = center,
-                .dir = dir,
+                .dir = unit(dir),
                 .radius = radius,
                 .length = length,
                 .index = index,
@@ -403,6 +401,167 @@ Scene parse(string filename) {
     return scene;
 }
 
+float shadow_check(Ray shadow, Light light, float light_distance, Scene scene) {
+
+    if (light.w == 0) {
+        light_distance = numeric_limits<float>::max();
+    }
+
+    float shadow_flag = 1.0f;
+    for (Sphere s : scene.spheres) {
+            float b = 2 * ( (shadow.dir.x * (shadow.origin.x - s.center.x)) + (shadow.dir.y * (shadow.origin.y - s.center.y)) + (shadow.dir.z * (shadow.origin.z - s.center.z)));
+            float c = pow(shadow.origin.x - s.center.x,2) + pow(shadow.origin.y - s.center.y,2) + pow(shadow.origin.z - s.center.z,2) - pow(s.radius,2);
+            float discriminant = (pow(b,2) - 4 * c);
+            if (discriminant > 0) { //2 intersections
+                float t1 = (-b + sqrt(discriminant)) / 2.0;
+                float t2 = (-b - sqrt(discriminant)) / 2.0;
+                float dist1 = length(shadow.dir * t1);
+                float dist2 = length(shadow.dir * t2);
+                if ((t1 > 0.01f && dist1 < light_distance) || (t2 > 0.01f && dist2 < light_distance)) {
+                    if (scene.softshadow) {
+                        //call soft shadow
+                        //printf("Sphere coord: %f,%f,%f\n", s.center.x, s.center.y,s.center.z);
+                        //shadow_flag = soft_shadow(shadow, s, light, intersect);
+                    }
+                    else {
+                        shadow_flag = 0;
+                    }
+                }
+                else {
+                    //printf("Intersect with itself or not in view\n");
+                    //shadow_flag += 1;
+                }
+
+            }
+            else if (discriminant == 0) { //one intersection point
+                float t = -b / 2.0;
+                float dist = length(shadow.dir * t);
+                if ((t > 0.01f) && (dist < light_distance)) {
+                    if (scene.softshadow) {
+                        //call soft shadow
+                        //shadow_flag = soft_shadow(shadow, s, light, intersect);
+                        //printf("Shadow_flag val : %f\n", shadow_flag);
+                        
+                    }
+                    else {
+                        shadow_flag = 0;
+                    }
+                }
+                else {
+                    printf("Intersect with itself or not in view\n");
+                    //shadow_flag += 1;
+                }
+            }
+        }
+
+        for (Triangle t: scene.triangles) { //check if any triangles cause shadow
+            //Ax + By + Cz + D = 0;
+            vec3 e1 = t.p1 - t.p0;
+            vec3 e2 = t.p2 - t.p0;
+            vec3 n = cross(e1,e2);
+            float d;
+            d = ((n.x * t.p0.x) + (n.y * t.p0.y) + (n.z * t.p0.z)) * (-1);
+            float triangle_t;
+            float numer = (-1) * ((n.x * shadow.origin.x) + (n.y * shadow.origin.y) + (n.z * shadow.origin.z) + d);
+            float denom = ((n.x * shadow.dir.x) + (n.y * shadow.dir.y) + (n.z * shadow.dir.z));
+            if (denom == 0) {
+                //no intersection
+                shadow_flag = 1;
+            }
+            else {
+                triangle_t = numer / denom;
+                //printf("TRIANGLE_T: %f", triangle_t);
+                float dist = length(shadow.dir * triangle_t);
+                if (triangle_t > 0.01f && dist < light_distance) { //THIS IS INTERSECTION
+                    //printf("INTERSECT WITH PLANE\n");
+                    vec3 p = (shadow.origin + (shadow.dir * triangle_t));
+                    vec3 e3 = p - t.p1;
+                    vec3 e4 = p - t.p2;
+                    float A = (0.5f) * length(cross(e1,e2));
+                    float a = (0.5f) * length(cross(e3,e4));
+                    float b = (0.5f) * length(cross(e4,e2));
+                    float c = (0.5f) * length(cross(e1,e3));
+                    float alpha = a/A;
+                    float beta = b/A;
+                    float gamma = c/A;
+                    if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
+                        if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.998) {
+                            shadow_flag = 0;
+                        }
+                        else {
+                            //shadow_flag = 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        for (Cylinder cylinder: scene.cylinders) {
+            vec3 p2 = cylinder.center + (unit(cylinder.dir)*(cylinder.length/2.0f));
+            vec3 p1 = cylinder.center - (unit(cylinder.dir)*(cylinder.length/2.0f));
+            cylinder.dir = (p2-p1)/length(p2-p1);
+            float a = dot(shadow.dir - (cylinder.dir * dot(shadow.dir,cylinder.dir)),shadow.dir - (cylinder.dir * dot(shadow.dir,cylinder.dir)));
+            float b = 2* (dot(shadow.dir - (cylinder.dir * dot(shadow.dir,cylinder.dir)), (shadow.origin-cylinder.center - (cylinder.dir * dot((shadow.origin-cylinder.center),cylinder.dir)))));
+            float c = dot(shadow.origin-cylinder.center - (cylinder.dir * dot(shadow.origin-cylinder.center,cylinder.dir)),shadow.origin-cylinder.center - (cylinder.dir * dot(shadow.origin-cylinder.center,cylinder.dir))) - pow(cylinder.radius,2); 
+            float discriminant = (pow(b,2) - 4 * a * c);
+            
+            if (discriminant > 0) {
+                float t1 = (-b + sqrt(discriminant)) / (2.0f * a); 
+                float t2 = (-b - sqrt(discriminant)) / (2.0f * a);
+
+                vec3 z1,z2;
+
+                z1 = shadow.origin + (shadow.dir * t1);
+                z2 = shadow.origin + (shadow.dir * t2);
+
+                if (t1 < 0 && t2 > 0) {       //t1 is under 0
+                    if (t2 < light_distance && t2 > 0.01f) {
+                        if (dot(cylinder.dir, z2-p1) > 0 && dot(cylinder.dir, z2-p2) < 0 ) {
+                            shadow_flag = 0;
+                        }
+                    }
+                }
+                else if (t2 < 0 && t1 > 0) {  //t2 is under 0
+                    if (t1 < light_distance && t1 > 0.01f) {
+                        if (dot(cylinder.dir, z1-p1) > 0 && dot(cylinder.dir, z1-p2) < 0 ) { 
+                            shadow_flag = 0;
+                        }
+                    }
+                }
+
+                else if (t2 > 0 && t1 > 0) { //both ts are positive
+                    float t = min(t1,t2);
+                    vec3 z = shadow.origin + (shadow.dir * t);
+                    if (t < light_distance && t > 0.01f) {
+                        if (dot(cylinder.dir, z-p1) > 0 && dot(cylinder.dir, z-p2) < 0 ) {
+                            shadow_flag = 0;
+                        }
+                        else { //if at the cut off, fill the furthest part
+                            t = max(t1,t2);
+                            z = shadow.origin + (shadow.dir * t);
+                            if (t < light_distance) {
+                                if (dot(cylinder.dir, z-p1) > 0 && dot(cylinder.dir, z-p2) < 0 ) {
+                                    shadow_flag = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else if (discriminant == 0) { //one intersection point
+                float t = -b / (2.0f * a);
+                vec3 z = shadow.origin + (shadow.dir * t);
+                if (t > 0 && t < light_distance) {
+                    if (dot(cylinder.dir, z-p1) > 0 && dot(cylinder.dir, z-p2) < 0 ) {
+                        shadow_flag = 0;
+                    }
+                }
+            }
+        }
+
+    return shadow_flag;
+}
+
 float soft_shadow(Ray shadow, Sphere s, Light light, vec3 intersect) {
     //srand(time(0)); //rand seed
     float shadow_flag = 0.0f;
@@ -536,8 +695,7 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
 
         //printf("Phi Theta %f %f\n",φ,Θ);
         //rotate the longitude value 180 degrees
-        Θ = Θ * -0.5;
-
+        Θ = Θ * -0.5; 
         //Make it range on the value of 1
         float v = φ / pi; //v
         float u = (Θ + pi) / (2.0f * pi); //u
@@ -612,156 +770,7 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
         H = unit(H);
         
         //Check for shadow intersection
-        
-
-        for (Sphere s : scene.spheres) {
-            float b = 2 * ( (shadow.dir.x * (shadow.origin.x - s.center.x)) + (shadow.dir.y * (shadow.origin.y - s.center.y)) + (shadow.dir.z * (shadow.origin.z - s.center.z)));
-            float c = pow(shadow.origin.x - s.center.x,2) + pow(shadow.origin.y - s.center.y,2) + pow(shadow.origin.z - s.center.z,2) - pow(s.radius,2);
-            float discriminant = (pow(b,2) - 4 * c);
-
-            if (light.w == 0) { //directional light
-                if (discriminant > 0) { //2 intersections
-                    float t1 = (-b + sqrt(discriminant)) / 2.0;
-                    float t2 = (-b - sqrt(discriminant)) / 2.0;
-                    if (t1 > 0.01f || t2 > 0.01f) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        shadow_flag = 1;
-                    }
-                }
-                else if (discriminant == 0) { //one intersection point
-                    float t = -b / 2.0;
-                    if (t > 0.01f) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        shadow_flag = 1;
-                    }
-                }
-            }
-            else { //point light
-                if (discriminant > 0) { //2 intersections
-                    float t1 = (-b + sqrt(discriminant)) / 2.0;
-                    float t2 = (-b - sqrt(discriminant)) / 2.0;
-                    float dist1 = length(shadow.dir * t1);
-                    float dist2 = length(shadow.dir * t2);
-                    if ((t1 > 0.01f && dist1 < light_distance) || (t2 > 0.01f && dist2 < light_distance)) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            //printf("Sphere coord: %f,%f,%f\n", s.center.x, s.center.y,s.center.z);
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        //printf("Intersect with itself or not in view\n");
-                        //shadow_flag += 1;
-                    }
-
-                }
-                else if (discriminant == 0) { //one intersection point
-                    float t = -b / 2.0;
-                    float dist = length(shadow.dir * t);
-                    if ((t > 0.01f) && (dist < light_distance)) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                            //printf("Shadow_flag val : %f\n", shadow_flag);
-                            
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        printf("Intersect with itself or not in view\n");
-                        //shadow_flag += 1;
-                    }
-                }
-            }
-        }
-
-        for (Triangle t: scene.triangles) { //check if any triangles cause shadow
-            //Ax + By + Cz + D = 0;
-            vec3 e1 = t.p1 - t.p0;
-            vec3 e2 = t.p2 - t.p0;
-            vec3 n = cross(e1,e2);
-            float d;
-            d = ((n.x * t.p0.x) + (n.y * t.p0.y) + (n.z * t.p0.z)) * (-1);
-            float triangle_t;
-            float numer = (-1) * ((n.x * shadow.origin.x) + (n.y * shadow.origin.y) + (n.z * shadow.origin.z) + d);
-            float denom = ((n.x * shadow.dir.x) + (n.y * shadow.dir.y) + (n.z * shadow.dir.z));
-            if (denom == 0) {
-                //no intersection
-                shadow_flag = 1;
-            }
-            else {
-                triangle_t = numer / denom;
-                //printf("TRIANGLE_T: %f", triangle_t);
-                float dist = length(shadow.dir * triangle_t);
-                if (light.w == 1) { //point light
-                    if (triangle_t > 0.01f && dist < light_distance) { //THIS IS INTERSECTION
-                        //printf("INTERSECT WITH PLANE\n");
-                        vec3 p = (shadow.origin + (shadow.dir * triangle_t));
-                        vec3 e3 = p - t.p1;
-                        vec3 e4 = p - t.p2;
-                        float A = (0.5f) * length(cross(e1,e2));
-                        float a = (0.5f) * length(cross(e3,e4));
-                        float b = (0.5f) * length(cross(e4,e2));
-                        float c = (0.5f) * length(cross(e1,e3));
-                        float alpha = a/A;
-                        float beta = b/A;
-                        float gamma = c/A;
-                        if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.998) {
-                                shadow_flag = 0;
-                            }
-                            else {
-                                shadow_flag = 1;
-                            }
-                        }
-                    }
-                }
-                else { //direcitonal light
-                    if (triangle_t > 0.01f) { //THIS IS INTERSECTION
-                        //printf("INTERSECT WITH PLANE\n");
-                        vec3 p = (shadow.origin + (shadow.dir * triangle_t));
-                        vec3 e3 = p - t.p1;
-                        vec3 e4 = p - t.p2;
-                        float A = (0.5f) * length(cross(e1,e2));
-                        float a = (0.5f) * length(cross(e3,e4));
-                        float b = (0.5f) * length(cross(e4,e2));
-                        float c = (0.5f) * length(cross(e1,e3));
-                        float alpha = a/A;
-                        float beta = b/A;
-                        float gamma = c/A;
-                        if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.998) {
-                                shadow_flag = 0;
-                            }
-                            else {
-                                shadow_flag = 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        shadow_flag = shadow_check(shadow, light, light_distance, scene);
 
         shadow_flag = min(1.0f,shadow_flag);
 
@@ -932,7 +941,7 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
         Ig = color.ka * color.odg; //ambient
         Ib = color.ka * color.odb; //ambient
     }
-    else if (triangle.type == 3) { //texture
+    else if (triangle.type == 3) { //texture and smooth shading
         vec3 e1 = triangle.p1 - triangle.p0;
         vec3 e2 = triangle.p2 - triangle.p0;
         vec3 e3 = intersect - triangle.p1;
@@ -950,7 +959,6 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
         float u = (triangle.vt0.x * alpha) + (triangle.vt1.x * beta) + (triangle.vt2.x * gamma);
         float v = (triangle.vt0.y * alpha) + (triangle.vt1.y * beta) + (triangle.vt2.y * gamma);
         //printf("U and V value: %f %f\n", u,v);
-        //printf("Texture size: %d %d\n", scene.textureHeight, scene.textureWidth);
         float i = round(u * (scene.textureImages[triangle.textureIndex].width - 1));
         float j = round(v * (scene.textureImages[triangle.textureIndex].height - 1));
 
@@ -1013,158 +1021,7 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
         //Check for shadow intersection
         
 
-        for (Sphere s : scene.spheres) {
-            float b = 2 * ( (shadow.dir.x * (shadow.origin.x - s.center.x)) + (shadow.dir.y * (shadow.origin.y - s.center.y)) + (shadow.dir.z * (shadow.origin.z - s.center.z)));
-            float c = pow(shadow.origin.x - s.center.x,2) + pow(shadow.origin.y - s.center.y,2) + pow(shadow.origin.z - s.center.z,2) - pow(s.radius,2);
-            float discriminant = (pow(b,2) - 4 * c);
-
-            if (light.w == 0) { //directional light
-                if (discriminant > 0) { //2 intersections
-                    float t1 = (-b + sqrt(discriminant)) / 2.0;
-                    float t2 = (-b - sqrt(discriminant)) / 2.0;
-                    if (t1 > 0.01f || t2 > 0.01f) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        shadow_flag = 1;
-                    }
-                }
-                else if (discriminant == 0) { //one intersection point
-                    float t = -b / 2.0;
-                    if (t > 0.01f) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        shadow_flag = 1;
-                    }
-                }
-            }
-            else { //point light
-                if (discriminant > 0) { //2 intersections
-                    float t1 = (-b + sqrt(discriminant)) / 2.0;
-                    float t2 = (-b - sqrt(discriminant)) / 2.0;
-                    float dist1 = length(shadow.dir * t1);
-                    float dist2 = length(shadow.dir * t2);
-                    if ((t1 > 0.01f && dist1 < light_distance) || (t2 > 0.01f && dist2 < light_distance)) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            //printf("Sphere coord: %f,%f,%f\n", s.center.x, s.center.y,s.center.z);
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        //printf("Intersect with itself or not in view\n");
-                        //shadow_flag += 1;
-                    }
-
-                }
-                else if (discriminant == 0) { //one intersection point
-                    float t = -b / 2.0;
-                    float dist = length(shadow.dir * t);
-                    if ((t > 0.01f) && (dist < light_distance)) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                            //printf("Shadow_flag val : %f\n", shadow_flag);
-                            
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        printf("Intersect with itself or not in view\n");
-                        //shadow_flag += 1;
-                    }
-                }
-            }
-        }
-
-        for (Triangle t: scene.triangles) { //check if any triangles cause shadow
-
-            vec3 ee1 = t.p1 - t.p0;
-            vec3 ee2 = t.p2 - t.p0;
-            vec3 normal = cross(ee1,ee2);
-            normal = unit(normal);
-            //Ax + By + Cz + D = 0;
-            float d;
-            d = ((normal.x * t.p0.x) + (normal.y * t.p0.y) + (normal.z * t.p0.z)) * (-1);
-            float triangle_t;
-            float numer = (-1) * ((normal.x * shadow.origin.x) + (normal.y * shadow.origin.y) + (normal.z * shadow.origin.z) + d);
-            float denom = ((normal.x * shadow.dir.x) + (normal.y * shadow.dir.y) + (normal.z * shadow.dir.z));
-            if (denom == 0) {
-                //no intersection
-                shadow_flag = 1;
-            }
-            else {
-                triangle_t = numer / denom;
-                //printf("TRIANGLE_T: %f", triangle_t);
-                float dist = length(shadow.dir * triangle_t);
-                if (light.w == 1) { //point light
-                    if (triangle_t > 0.01f && dist < light_distance) { //THIS IS INTERSECTION
-                        //printf("INTERSECT WITH PLANE\n");
-                        vec3 p = (shadow.origin + (shadow.dir * triangle_t));
-                        vec3 e3 = p - t.p1;
-                        vec3 e4 = p - t.p2;
-                        float A = (0.5f) * length(cross(ee1,ee2));
-                        float a = (0.5f) * length(cross(e3,e4));
-                        float b = (0.5f) * length(cross(e4,ee2));
-                        float c = (0.5f) * length(cross(ee1,e3));
-                        float alpha = a/A;
-                        float beta = b/A;
-                        float gamma = c/A;
-                        if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.999) {
-                                //printf("SHADOW\n");
-                                shadow_flag = 0;
-                            }
-                            else {
-                                shadow_flag = 1;
-                            }
-                        }
-                    }
-                }
-                else { //direcitonal light
-                    if (triangle_t > 0.01f) { //THIS IS INTERSECTION
-                        //printf("INTERSECT WITH PLANE\n");
-                        vec3 p = (shadow.origin + (shadow.dir * triangle_t));
-                        vec3 e3 = p - t.p1;
-                        vec3 e4 = p - t.p2;
-                        float A = (0.5f) * length(cross(ee1,ee2));
-                        float a = (0.5f) * length(cross(e3,e4));
-                        float b = (0.5f) * length(cross(e4,ee2));
-                        float c = (0.5f) * length(cross(ee1,e3));
-                        float alpha = a/A;
-                        float beta = b/A;
-                        float gamma = c/A;
-                        if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.999) {
-                                //printf("SHADOW\n");
-                                shadow_flag = 0;
-                            }
-                            else {
-                                shadow_flag = 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        shadow_flag = shadow_check(shadow, light, light_distance, scene);
 
         shadow_flag = min(1.0f,shadow_flag);
         shadow_flag = max(0.0f, shadow_flag);
@@ -1225,7 +1082,7 @@ vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
     return shaded_color;
 }
 
-vec3 shade_rayCylinder(Scene scene, Cylinder cylinder, vec3 intersect) {
+vec3 shade_rayCylinder(Scene scene, Cylinder cylinder, vec3 intersect, bool inside) {
 
     vec3 shaded_color;
 
@@ -1234,8 +1091,8 @@ vec3 shade_rayCylinder(Scene scene, Cylinder cylinder, vec3 intersect) {
     float Ib;
     Material color;
 
-    if (triangle.index > -1) { //MATERIAL COLOR
-        color = scene.materials[triangle.index];
+    if (cylinder.index > -1) { //MATERIAL COLOR
+        color = scene.materials[cylinder.index];
         Ir = color.ka * color.odr; //ambient
         Ig = color.ka * color.odg; //ambient
         Ib = color.ka * color.odb; //ambient
@@ -1245,110 +1102,11 @@ vec3 shade_rayCylinder(Scene scene, Cylinder cylinder, vec3 intersect) {
     vec3 lightIntensity; /// scene.lights.size();
 
     //surface normal vector
-    vec3 N;
-
-    //printf("TRIANGLE TYPE: %d", triangle.type);
-    if (triangle.type == 0) { //flat shading
-        vec3 e1 = triangle.p1 - triangle.p0;
-        vec3 e2 = triangle.p2 - triangle.p0;
-        N = cross(e1,e2);
-        N = unit(N);
-    }
-
-    else if (triangle.type == 1) { //smooth shading
-        vec3 e1 = triangle.p1 - triangle.p0;
-        vec3 e2 = triangle.p2 - triangle.p0;
-        vec3 e3 = intersect - triangle.p1;
-        vec3 e4 = intersect - triangle.p2;
-        float A = (0.5f) * length(cross(e1,e2));
-        float a = (0.5f) * length(cross(e3,e4));
-        float b = (0.5f) * length(cross(e4,e2));
-        float c = (0.5f) * length(cross(e1,e3));
-        float alpha = a/A;
-        float beta = b/A;
-        float gamma = c/A;
-        //cout << "N0: " << triangle.n0 << endl;
-        //cout << triangle.n1 << endl;
-        //cout << triangle.n2 << endl;
-        //printf("%f %f %f \n", alpha, beta, gamma);
-        N = ((triangle.n0 * alpha) + (triangle.n1 * beta) + (triangle.n2 * gamma));
-        N = unit(N);
-    }
-
-    else if (triangle.type == 2) { //texture
-        vec3 e1 = triangle.p1 - triangle.p0;
-        vec3 e2 = triangle.p2 - triangle.p0;
-        vec3 e3 = intersect - triangle.p1;
-        vec3 e4 = intersect - triangle.p2;
-        float A = (0.5f) * length(cross(e1,e2));
-        float a = (0.5f) * length(cross(e3,e4));
-        float b = (0.5f) * length(cross(e4,e2));
-        float c = (0.5f) * length(cross(e1,e3));
-        float alpha = a/A;
-        float beta = b/A;
-        float gamma = c/A;
-
-        N = cross(e1,e2);
-        N = unit(N);
-        //vt0.x = u0, vt0.y = v0
-        float u = (triangle.vt0.x * alpha) + (triangle.vt1.x * beta) + (triangle.vt2.x * gamma);
-        float v = (triangle.vt0.y * alpha) + (triangle.vt1.y * beta) + (triangle.vt2.y * gamma);
-        //printf("U and V value: %f %f\n", u,v);
-        //printf("Texture size: %d %d\n", scene.textureHeight, scene.textureWidth);
-        float i = round(u * (scene.textureImages[triangle.textureIndex].width - 1));
-        float j = round(v * (scene.textureImages[triangle.textureIndex].height - 1));
-
-        //make sure it doesn't go out of bounds
-
-        if (i == scene.textureImages[triangle.textureIndex].width) {
-            i -= 1;
-        }
-        if (j == scene.textureImages[triangle.textureIndex].height) {
-            j-=1;
-        }
-        color.odr = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].x;
-        color.odg = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].y;
-        color.odb = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].z;
-        Ir = color.ka * color.odr; //ambient
-        Ig = color.ka * color.odg; //ambient
-        Ib = color.ka * color.odb; //ambient
-    }
-    else if (triangle.type == 3) { //texture
-        vec3 e1 = triangle.p1 - triangle.p0;
-        vec3 e2 = triangle.p2 - triangle.p0;
-        vec3 e3 = intersect - triangle.p1;
-        vec3 e4 = intersect - triangle.p2;
-        float A = (0.5f) * length(cross(e1,e2));
-        float a = (0.5f) * length(cross(e3,e4));
-        float b = (0.5f) * length(cross(e4,e2));
-        float c = (0.5f) * length(cross(e1,e3));
-        float alpha = a/A;
-        float beta = b/A;
-        float gamma = c/A;
-        N = ((triangle.n0 * alpha) + (triangle.n1 * beta) + (triangle.n2 * gamma));
-        N = unit(N);
-        //vt0.x = u0, vt0.y = v0
-        float u = (triangle.vt0.x * alpha) + (triangle.vt1.x * beta) + (triangle.vt2.x * gamma);
-        float v = (triangle.vt0.y * alpha) + (triangle.vt1.y * beta) + (triangle.vt2.y * gamma);
-        //printf("U and V value: %f %f\n", u,v);
-        //printf("Texture size: %d %d\n", scene.textureHeight, scene.textureWidth);
-        float i = round(u * (scene.textureImages[triangle.textureIndex].width - 1));
-        float j = round(v * (scene.textureImages[triangle.textureIndex].height - 1));
-
-        if (i == scene.textureImages[triangle.textureIndex].width) {
-            i -= 1;
-        }
-        if (j == scene.textureImages[triangle.textureIndex].height) {
-            j-=1;
-        }
-
-        color.odr = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].x;
-        color.odg = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].y;
-        color.odb = scene.textureImages[triangle.textureIndex].imageArray[int(j)][int(i)].z;
-        Ir = color.ka * color.odr; //ambient
-        Ig = color.ka * color.odg; //ambient
-        Ib = color.ka * color.odb; //ambient
-    }
+    vec3 N ;
+    vec3 cylinder_bottom = cylinder.center - (cylinder.dir * (cylinder.length/2.0f));
+    float t = dot(intersect - cylinder_bottom, cylinder.dir);
+    vec3 pt = cylinder_bottom + (cylinder.dir * t);
+    N = unit(intersect - pt);
     //Vector in direction of viewer
     vec3 V = scene.eye - intersect;
     //vec3 V = (scene.viewdir);
@@ -1392,161 +1150,13 @@ vec3 shade_rayCylinder(Scene scene, Cylinder cylinder, vec3 intersect) {
         H = unit(H);
         
         //Check for shadow intersection
-        
-
-        for (Sphere s : scene.spheres) {
-            float b = 2 * ( (shadow.dir.x * (shadow.origin.x - s.center.x)) + (shadow.dir.y * (shadow.origin.y - s.center.y)) + (shadow.dir.z * (shadow.origin.z - s.center.z)));
-            float c = pow(shadow.origin.x - s.center.x,2) + pow(shadow.origin.y - s.center.y,2) + pow(shadow.origin.z - s.center.z,2) - pow(s.radius,2);
-            float discriminant = (pow(b,2) - 4 * c);
-
-            if (light.w == 0) { //directional light
-                if (discriminant > 0) { //2 intersections
-                    float t1 = (-b + sqrt(discriminant)) / 2.0;
-                    float t2 = (-b - sqrt(discriminant)) / 2.0;
-                    if (t1 > 0.01f || t2 > 0.01f) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        shadow_flag = 1;
-                    }
-                }
-                else if (discriminant == 0) { //one intersection point
-                    float t = -b / 2.0;
-                    if (t > 0.01f) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        shadow_flag = 1;
-                    }
-                }
-            }
-            else { //point light
-                if (discriminant > 0) { //2 intersections
-                    float t1 = (-b + sqrt(discriminant)) / 2.0;
-                    float t2 = (-b - sqrt(discriminant)) / 2.0;
-                    float dist1 = length(shadow.dir * t1);
-                    float dist2 = length(shadow.dir * t2);
-                    if ((t1 > 0.01f && dist1 < light_distance) || (t2 > 0.01f && dist2 < light_distance)) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            //printf("Sphere coord: %f,%f,%f\n", s.center.x, s.center.y,s.center.z);
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        //printf("Intersect with itself or not in view\n");
-                        //shadow_flag += 1;
-                    }
-
-                }
-                else if (discriminant == 0) { //one intersection point
-                    float t = -b / 2.0;
-                    float dist = length(shadow.dir * t);
-                    if ((t > 0.01f) && (dist < light_distance)) {
-                        if (scene.softshadow) {
-                            //call soft shadow
-                            shadow_flag = soft_shadow(shadow, s, light, intersect);
-                            //printf("Shadow_flag val : %f\n", shadow_flag);
-                            
-                        }
-                        else {
-                            shadow_flag = 0;
-                        }
-                    }
-                    else {
-                        printf("Intersect with itself or not in view\n");
-                        //shadow_flag += 1;
-                    }
-                }
-            }
+        if (inside) {
+            shadow_flag = 0;
         }
 
-        for (Triangle t: scene.triangles) { //check if any triangles cause shadow
-
-            vec3 ee1 = t.p1 - t.p0;
-            vec3 ee2 = t.p2 - t.p0;
-            vec3 normal = cross(ee1,ee2);
-            normal = unit(normal);
-            //Ax + By + Cz + D = 0;
-            float d;
-            d = ((normal.x * t.p0.x) + (normal.y * t.p0.y) + (normal.z * t.p0.z)) * (-1);
-            float triangle_t;
-            float numer = (-1) * ((normal.x * shadow.origin.x) + (normal.y * shadow.origin.y) + (normal.z * shadow.origin.z) + d);
-            float denom = ((normal.x * shadow.dir.x) + (normal.y * shadow.dir.y) + (normal.z * shadow.dir.z));
-            if (denom == 0) {
-                //no intersection
-                shadow_flag = 1;
-            }
-            else {
-                triangle_t = numer / denom;
-                //printf("TRIANGLE_T: %f", triangle_t);
-                float dist = length(shadow.dir * triangle_t);
-                if (light.w == 1) { //point light
-                    if (triangle_t > 0.01f && dist < light_distance) { //THIS IS INTERSECTION
-                        //printf("INTERSECT WITH PLANE\n");
-                        vec3 p = (shadow.origin + (shadow.dir * triangle_t));
-                        vec3 e3 = p - t.p1;
-                        vec3 e4 = p - t.p2;
-                        float A = (0.5f) * length(cross(ee1,ee2));
-                        float a = (0.5f) * length(cross(e3,e4));
-                        float b = (0.5f) * length(cross(e4,ee2));
-                        float c = (0.5f) * length(cross(ee1,e3));
-                        float alpha = a/A;
-                        float beta = b/A;
-                        float gamma = c/A;
-                        if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.999) {
-                                //printf("SHADOW\n");
-                                shadow_flag = 0;
-                            }
-                            else {
-                                shadow_flag = 1;
-                            }
-                        }
-                    }
-                }
-                else { //direcitonal light
-                    if (triangle_t > 0.01f) { //THIS IS INTERSECTION
-                        //printf("INTERSECT WITH PLANE\n");
-                        vec3 p = (shadow.origin + (shadow.dir * triangle_t));
-                        vec3 e3 = p - t.p1;
-                        vec3 e4 = p - t.p2;
-                        float A = (0.5f) * length(cross(ee1,ee2));
-                        float a = (0.5f) * length(cross(e3,e4));
-                        float b = (0.5f) * length(cross(e4,ee2));
-                        float c = (0.5f) * length(cross(ee1,e3));
-                        float alpha = a/A;
-                        float beta = b/A;
-                        float gamma = c/A;
-                        if ((alpha >= 0 && alpha <= 1) && (gamma >= 0 && gamma <= 1) && (beta >= 0 && beta <= 1 )) { //in triangle
-                            if (alpha + gamma + beta < 1.001 && alpha + gamma + beta > 0.999) {
-                                //printf("SHADOW\n");
-                                shadow_flag = 0;
-                            }
-                            else {
-                                shadow_flag = 1;
-                            }
-                        }
-                    }
-                }
-            }
+        else { 
+            shadow_flag = shadow_check(shadow, light, light_distance, scene);
         }
-
         shadow_flag = min(1.0f,shadow_flag);
         shadow_flag = max(0.0f, shadow_flag);
 
@@ -1711,6 +1321,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
     }
 
     Cylinder closest_cylinder;
+    bool inside = false;
 
     for (Cylinder cylinder: scene.cylinders) {
         vec3 p2 = cylinder.center + (unit(cylinder.dir)*(cylinder.length/2.0f));
@@ -1775,6 +1386,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
                             intersect = true;
                             inter_triangle = false;
                             inter_cylinder = true;
+                            inside = true;
                         }
                     }
                 }
@@ -1808,23 +1420,23 @@ vec3 trace_ray(Ray ray, Scene scene) {
         intersection_point.z =(ray.origin.z + ray.dir.z*closest_t);
 
         if (inter_triangle) { //calculate triangle shading
-            return shade_rayTriangle(scene, closest_triangle, intersection_point);
+            return shade_rayTriangle(scene,closest_triangle, intersection_point);
         }
 
         else if (inter_cylinder) {
-            return shade_rayCylinder(scene, closest_cylinder, intersection_point);
+            return shade_rayCylinder(scene,closest_cylinder, intersection_point, inside);
         }
 
         else { //sphere shading
-            return shade_ray(scene, closest_sphere, intersection_point);
+            return shade_ray(scene,closest_sphere, intersection_point);
         }
     }
 }
 
 
 int main(int argc, char* argv[]) {
-    Scene scene;
 
+    Scene scene;
 
     float viewdist = 10.0f;
     if (argc == 3) {
@@ -1922,7 +1534,6 @@ int main(int argc, char* argv[]) {
             vt0 = scene.texture_coords[scene.faces[i].vt.x-1];
             vt1 = scene.texture_coords[scene.faces[i].vt.y-1];
             vt2 = scene.texture_coords[scene.faces[i].vt.z-1];
-
             Triangle t {
                 .p0 = p0,
                 .p1 = p1,
@@ -2035,80 +1646,3 @@ int main(int argc, char* argv[]) {
 
 
 }
-
-//testing intersection
-    
-    /*Ray raytest;
-    raytest.origin = vec3{
-        .x = 0,
-        .y = 0,
-        .z = 0,
-    };
-    raytest.dir = vec3{
-        .x = 0,
-        .y = 0.5,
-        .z = -1,
-    };
-
-    raytest.dir = unit(raytest.dir);
-
-    Sphere spheretest;
-    spheretest.center = vec3 {
-        .x = 0,
-        .y = 0,
-        .z = -10,
-    };
-    spheretest.radius = 8;
-
-    printf("XOrigin: %f\n", raytest.origin.x);
-    printf("Center: %f\n", (raytest.dir.z * (raytest.origin.z - spheretest.center.z)));
-
-    float b = 2 * ( (raytest.dir.x * (raytest.origin.x - spheretest.center.x)) + (raytest.dir.y * (raytest.origin.y - spheretest.center.y)) + (raytest.dir.z * (raytest.origin.z - spheretest.center.z)));
-    float c = pow(raytest.origin.x - spheretest.center.x,2) + pow(raytest.origin.y - spheretest.center.y,2) + pow(raytest.origin.z - spheretest.center.z,2) - pow(spheretest.radius,2);
-    float discriminant = (pow(b,2) - 4 * c);
-
-    printf("B: %f\n", b);
-    printf("C: %f\n", c);
-
-    if (discriminant > 0) {
-        float t1 = (-b + sqrt(discriminant)) / 2.0;
-        float t2 = (-b - sqrt(discriminant)) / 2.0;
-        printf("%f\n",t1);
-        printf("%f\n",t2);
-    }
-    */
-
-
-    //testing triangel intersection
-    //         triangle.p0 = {
-    //         .x = 1,
-    //         .y = 0,
-    //         .z = 0,
-    //     };
-    //     triangle.p1 = {
-    //         .x = 0,
-    //         .y = 1,
-    //         .z = 0,
-    //     };
-    //     triangle.p2 = {
-    //         .x = 0,
-    //         .y = 0,
-    //         .z = 1,
-    //     };
-
-    //     vec3 orig {
-    //     .x = 0,
-    //     .y = 0,
-    //     .z = 0,
-    // };
-
-    // vec3 d {
-    //     .x = 1.0f/3.0f,
-    //     .y = 2.0f/3.0f,
-    //     .z = 2.0f/3.0f,
-    // };
-
-    // ray = {
-    //     .origin = orig,
-    //     .dir = d,
-    // };

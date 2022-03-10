@@ -45,6 +45,7 @@ struct Cylinder {
     float radius;
     float length;
     int index;
+    int textureIndex;
 };
 
 struct Material {
@@ -115,12 +116,7 @@ struct Scene {
     int width;
     bool depth = false; //flag if depthcueing is being used
     bool softshadow = false;
-    //bool atten = false;
 };
 
 #endif
 
-// struct Objects {
-//     std::vector<Sphere> spheres;
-//     std::vector<Cylinder> cylinders;
-// }

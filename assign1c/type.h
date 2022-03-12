@@ -40,7 +40,7 @@ struct Triangle {
 };
 
 struct Cylinder {
-    vec3 center;
+    vec3 origin;
     vec3 dir;
     float radius;
     float length;

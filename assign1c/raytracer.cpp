@@ -189,20 +189,20 @@ Scene parse(string filename) {
         }
         
         else if (keyword == "cylinder") {
-            vec3 center;
+            vec3 origin;
             vec3 dir;
             float length;
             float radius;
-            inputstream >> center.x >> center.y >> center.z >> dir.x >> dir.y >> dir.z >> radius >> length;
+            inputstream >> origin.x >> origin.y >> origin.z >> dir.x >> dir.y >> dir.z >> radius >> length;
             Cylinder cylinder = {
-                .center = center,
+                .origin = origin,
                 .dir = unit(dir),
                 .radius = radius,
                 .length = length,
                 .index = index,
             };
             printf("Cylinder (Position: %f %f %f) (Dir: %f %f %f) Radius: %f Length: %f Index: %d)\n",
-                cylinder.center.x, cylinder.center.y, cylinder.center.z, cylinder.dir.x, cylinder.dir.y, cylinder.dir.z, cylinder.radius, cylinder.length, cylinder.index);
+                cylinder.origin.x, cylinder.origin.y, cylinder.origin.z, cylinder.dir.x, cylinder.dir.y, cylinder.dir.z, cylinder.radius, cylinder.length, cylinder.index);
             scene.cylinders.push_back(cylinder);
         }
 
@@ -497,12 +497,12 @@ float shadow_check(Ray shadow, Light light, float light_distance, Scene scene) {
         }
 
         for (Cylinder cylinder: scene.cylinders) {
-            vec3 p2 = cylinder.center + (unit(cylinder.dir)*(cylinder.length/2.0f));
-            vec3 p1 = cylinder.center - (unit(cylinder.dir)*(cylinder.length/2.0f));
+            vec3 p2 = cylinder.origin + (cylinder.dir*(cylinder.length));
+            vec3 p1 = cylinder.origin;
             cylinder.dir = (p2-p1)/length(p2-p1);
             float a = dot(shadow.dir - (cylinder.dir * dot(shadow.dir,cylinder.dir)),shadow.dir - (cylinder.dir * dot(shadow.dir,cylinder.dir)));
-            float b = 2* (dot(shadow.dir - (cylinder.dir * dot(shadow.dir,cylinder.dir)), (shadow.origin-cylinder.center - (cylinder.dir * dot((shadow.origin-cylinder.center),cylinder.dir)))));
-            float c = dot(shadow.origin-cylinder.center - (cylinder.dir * dot(shadow.origin-cylinder.center,cylinder.dir)),shadow.origin-cylinder.center - (cylinder.dir * dot(shadow.origin-cylinder.center,cylinder.dir))) - pow(cylinder.radius,2); 
+            float b = 2* (dot(shadow.dir - (cylinder.dir * dot(shadow.dir,cylinder.dir)), (shadow.origin-cylinder.origin - (cylinder.dir * dot((shadow.origin-cylinder.origin),cylinder.dir)))));
+            float c = dot(shadow.origin-cylinder.origin - (cylinder.dir * dot(shadow.origin-cylinder.origin,cylinder.dir)),shadow.origin-cylinder.origin - (cylinder.dir * dot(shadow.origin-cylinder.origin,cylinder.dir))) - pow(cylinder.radius,2); 
             float discriminant = (pow(b,2) - 4 * a * c);
             
             if (discriminant > 0) {
@@ -1103,9 +1103,8 @@ vec3 shade_rayCylinder(Scene scene, Cylinder cylinder, vec3 intersect, bool insi
 
     //surface normal vector
     vec3 N ;
-    vec3 cylinder_bottom = cylinder.center - (cylinder.dir * (cylinder.length/2.0f));
-    float t = dot(intersect - cylinder_bottom, cylinder.dir);
-    vec3 pt = cylinder_bottom + (cylinder.dir * t);
+    float t = dot(intersect - cylinder.origin, cylinder.dir);
+    vec3 pt = cylinder.origin + (cylinder.dir * t);
     N = unit(intersect - pt);
     //Vector in direction of viewer
     vec3 V = scene.eye - intersect;
@@ -1324,12 +1323,12 @@ vec3 trace_ray(Ray ray, Scene scene) {
     bool inside = false;
 
     for (Cylinder cylinder: scene.cylinders) {
-        vec3 p2 = cylinder.center + (unit(cylinder.dir)*(cylinder.length/2.0f));
-        vec3 p1 = cylinder.center - (unit(cylinder.dir)*(cylinder.length/2.0f));
+        vec3 p2 = cylinder.origin + (cylinder.dir*(cylinder.length));
+        vec3 p1 = cylinder.origin;
         cylinder.dir = (p2-p1)/length(p2-p1);
         float a = dot(ray.dir - (cylinder.dir * dot(ray.dir,cylinder.dir)),ray.dir - (cylinder.dir * dot(ray.dir,cylinder.dir)));
-        float b = 2* (dot(ray.dir - (cylinder.dir * dot(ray.dir,cylinder.dir)), (ray.origin-cylinder.center - (cylinder.dir * dot((ray.origin-cylinder.center),cylinder.dir)))));
-        float c = dot(ray.origin-cylinder.center - (cylinder.dir * dot(ray.origin-cylinder.center,cylinder.dir)),ray.origin-cylinder.center - (cylinder.dir * dot(ray.origin-cylinder.center,cylinder.dir))) - pow(cylinder.radius,2); 
+        float b = 2* (dot(ray.dir - (cylinder.dir * dot(ray.dir,cylinder.dir)), (ray.origin-cylinder.origin - (cylinder.dir * dot((ray.origin-cylinder.origin),cylinder.dir)))));
+        float c = dot(ray.origin-cylinder.origin - (cylinder.dir * dot(ray.origin-cylinder.origin,cylinder.dir)),ray.origin-cylinder.origin - (cylinder.dir * dot(ray.origin-cylinder.origin,cylinder.dir))) - pow(cylinder.radius,2); 
         float discriminant = (pow(b,2) - 4 * a * c);
         
         if (discriminant > 0) {

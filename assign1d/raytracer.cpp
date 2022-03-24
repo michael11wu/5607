@@ -85,6 +85,10 @@ vec3 operator-(vec3 a, vec3 b) {
     return vect;
 }
 
+bool operator==(vec3 a, vec3 b) {
+    return (a.x == b.x && a.y == b.y && a.z == b.z);
+}
+
 ostream& operator<<(ostream& os, vec3 vect) {
     return cout << vect.x << " " << vect.y << " " << vect.z;
 }
@@ -143,10 +147,11 @@ vec3 ** texture_parse(string filename) {
     return texArray;
 }
 
+//forward declare
+vec3 trace_ray(Ray ray, Scene scene, int recursion_depth, bool recursion);
 
 //Parsing scene and returns a scene object
 Scene parse(string filename) {
-
     Scene scene;
 
     ifstream inputstream(filename, std::ios::in | std::ios::binary);
@@ -222,9 +227,9 @@ Scene parse(string filename) {
         else if (keyword == "mtlcolor") {
             index++;
             Material m;
-            inputstream >> m.odr >> m.odg >> m.odb >> m.osr >> m.osg >> m.osb >> m.ka >> m.kd >> m.ks >> m.n;
+            inputstream >> m.odr >> m.odg >> m.odb >> m.osr >> m.osg >> m.osb >> m.ka >> m.kd >> m.ks >> m.n >> m.opacity >> m.refraction;
             scene.materials.push_back(m);
-            printf("mtcolor: %f %f %f %f %f %f %f %f %f %f\n", m.odr, m.odg, m.odb, m.osr, m.osg, m.osb, m.ka, m.kd, m.ks, m.n);
+            printf("mtcolor: %f %f %f %f %f %f %f %f %f %f %f %f\n", m.odr, m.odg, m.odb, m.osr, m.osg, m.osb, m.ka, m.kd, m.ks, m.n, m.opacity, m.refraction);
 
         }
 
@@ -282,7 +287,7 @@ Scene parse(string filename) {
             vec3 v;
             inputstream >> v.x >> v.y >> v.z;
             scene.vertices.push_back(v);
-            //printf("Vertices: %f %f %f\n", v.x, v.y, v.z);
+            printf("Vertices: %f %f %f\n", v.x, v.y, v.z);
 
         }
 
@@ -290,7 +295,7 @@ Scene parse(string filename) {
             vec3 v;
             inputstream >> v.x >> v.y >> v.z;
             scene.norm_vertices.push_back(v);
-            //printf("Norm Vertices: %f %f %f\n", v.x, v.y, v.z);
+            printf("Norm Vertices: %f %f %f\n", v.x, v.y, v.z);
 
         }
 
@@ -319,25 +324,25 @@ Scene parse(string filename) {
             f.textureIndex = textureIndex;
 
             if (sscanf(s.c_str(),"%f %f %f", &f.v.x, &f.v.y, &f.v.z)==3) { //f 1 2 3
-                //printf("V STYLE: ");
-                //printf("Faces: %f %f %f\n", f.v.x, f.v.y, f.v.z);
+                printf("V STYLE: ");
+                printf("Faces: %f %f %f\n", f.v.x, f.v.y, f.v.z);
                 f.type = 0;
             } 
             else if (sscanf(s.c_str(), "%f//%f %f//%f %f//%f",&f.v.x, &f.vn.x, &f.v.y, &f.vn.y, &f.v.z, &f.vn.z) == 6) { //f 1//1 1//1 1//1
             //success reading a face in v//n format; proceed accordingly
-                //printf("v//n style: ");
-                //printf("Faces: %f %f %f %f %f %f\n", f.v.x, f.vn.x, f.v.y, f.vn.y, f.v.z, f.vn.z);
+                printf("v//n style: ");
+                printf("Faces: %f %f %f %f %f %f\n", f.v.x, f.vn.x, f.v.y, f.vn.y, f.v.z, f.vn.z);
                 f.type = 1;
             } 
             else if (sscanf(s.c_str(), "%f/%f %f/%f %f/%f",&f.v.x, &f.vt.x, &f.v.y, &f.vt.y, &f.v.z, &f.vt.z) == 6) { //f 1/1 1/1 1/1
             //success reading a face in v/t format; proceed accordingly
-                //printf("v/t style: ");
-                //printf("Faces: %f %f %f %f %f %f\n", f.v.x, f.vt.x, f.v.y, f.vt.y, f.v.z, f.vt.z);
+                printf("v/t style: ");
+                printf("Faces: %f %f %f %f %f %f\n", f.v.x, f.vt.x, f.v.y, f.vt.y, f.v.z, f.vt.z);
                 f.type = 2;
             } 
             else if (sscanf(s.c_str(), "%f/%f/%f %f/%f/%f %f/%f/%f", &f.v.x, &f.vt.x, &f.vn.x, &f.v.y, &f.vt.y, &f.vn.y, &f.v.z, &f.vt.z, &f.vn.z ) == 9) { //f 1/1/1 1/1/1 1/1/1
-                //printf("v/t/n style: ");
-                //printf("Faces: %f %f %f %f %f %f %f %f %f\n", f.v.x, f.vt.x, f.vn.x, f.v.y, f.vt.y, f.vn.y, f.v.z, f.vt.z, f.vn.z);
+                printf("v/t/n style: ");
+                printf("Faces: %f %f %f %f %f %f %f %f %f\n", f.v.x, f.vt.x, f.vn.x, f.v.y, f.vt.y, f.vn.y, f.v.z, f.vt.z, f.vn.z);
                 f.type = 3;
             //success reading a face in v/t/n format; proceed accordingly
             } 
@@ -654,8 +659,9 @@ float soft_shadow(Ray shadow, Sphere s, Light light, vec3 intersect) {
 
 }
 
-vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
+vec3 shade_ray(Scene scene, Sphere sphere, Ray ray, vec3 intersect, int recursion_depth) {
 
+    // printf("Recursion depth: %d\n", recursion_depth);
     vec3 shaded_color;
 
     float Ir;
@@ -725,14 +731,21 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
     }
     
 
-    vec3 lightIntensity; //
+    vec3 lightIntensity; 
 
     //surface normal vector
     vec3 N = (intersect - sphere.center) / sphere.radius;
-    //Vector in direction of viewer
-    vec3 V = scene.eye - intersect;
-    //vec3 V = (scene.viewdir);
-    V = unit(V);
+    vec3 I = ray.origin - intersect;
+    I = unit(I);
+    float alpha = max(0.0f,dot(N,I));
+    //printf("alpha: %f\n", dot(N,I));
+    // other ways to combat underflow and overflow: two-side lighitng, abs(N dot L) or normalize finla image divide all I by Imax 
+    vec3 R = ((N * alpha) * 2.0f) - I;
+    float frensel;
+    float f0;
+    f0 = pow(((color.refraction - 1) / (color.refraction + 1)),2);
+    frensel = f0 + ((1-f0) * pow((1 - alpha),5));
+
     for (Light light : scene.lights) { //loop through lights
 
         float atten = 1.0f;
@@ -768,7 +781,7 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
         float cosDiffuse = max(0.0f, dot(N,L));
 
         //Halfway vector
-        vec3 H = (L + V);
+        vec3 H = (L + I);
         H = unit(H);
         
         //Check for shadow intersection
@@ -778,20 +791,6 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
 
         shadow_flag = max(0.0f, shadow_flag);
 
-        if (scene.softshadow)  {
-            if (shadow_flag < 1 && shadow_flag > 0) {
-                //cout << dot(N,H) << endl;
-                //cout << shadow_flag << endl;
-                // printf("=================\n");
-                // printf("%f %f %f %f %f %f %f\n", shadow_flag, lightIntensity, atten, (color.kd * color.odr), cosDiffuse,(color.ks * color.osr), pow(max(-0.000000000001f,dot(N, H)),color.n) );
-                //printf("R: %f\n",(Ir + (shadow_flag * lightIntensity.x * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-                //printf("G: %f\n",(Ig + (shadow_flag * lightIntensity.y * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-                //printf("b: %f\n",(Ib + (shadow_flag * lightIntensity.z * atten * ( ((color.kd * color.odr) * (cosDiffuse)) + ((color.ks * color.osr) * pow(max(0.0f,dot(N, H)),color.n))))));
-            }
-        }
-        else {
-            //cout << shadow_flag <<endl;
-        }
         if (shadow_flag < 1) {
             //cout << "FINAL IG COLOR: " << Ig << endl;
         }
@@ -834,9 +833,7 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
         shaded_color.y = Ig;
         shaded_color.z = Ib;
 
-        //printf("aDepht: %f\n", aDepth);
-
-        shaded_color = (shaded_color * aDepth) + (scene.depthCue.color * (1.0f - aDepth));
+        //printf("aDepht: %f\n", aDepth)
     }
 
     else {
@@ -851,8 +848,27 @@ vec3 shade_ray(Scene scene, Sphere sphere, vec3 intersect) {
         shaded_color.z = Ib;
     }
 
-    //cout << shaded_color << endl;
-    return shaded_color;
+    //Reflectance ray
+    Ray reflect = {
+        .origin = intersect,
+        .dir = R,
+    };
+
+    if (recursion_depth > 5) { //base case
+        return shaded_color * pow(frensel,recursion_depth);
+    }
+
+
+    if (recursion_depth == 1) { //starting case
+        shaded_color = shaded_color + trace_ray(reflect,scene,recursion_depth+1,true);
+        shaded_color.x = min(1.0f,shaded_color.x);
+        shaded_color.y = min(1.0f,shaded_color.y);
+        shaded_color.z = min(1.0f,shaded_color.z);
+        return shaded_color;
+    }
+    else {
+        return (shaded_color * pow(frensel,recursion_depth)) + trace_ray(reflect,scene,recursion_depth+1,true);
+    }
 }
 
 vec3 shade_rayTriangle(Scene scene, Triangle triangle, vec3 intersect) {
@@ -1221,7 +1237,7 @@ vec3 shade_rayCylinder(Scene scene, Cylinder cylinder, vec3 intersect, bool insi
 }
 
 
-vec3 trace_ray(Ray ray, Scene scene) {
+vec3 trace_ray(Ray ray, Scene scene, int recursion_depth, bool recursion) {
 
     bool intersect = false;
     bool inter_triangle = false;
@@ -1241,7 +1257,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
             float t1 = (-b + sqrt(discriminant)) / 2.0;
             float t2 = (-b - sqrt(discriminant)) / 2.0;
 
-            if (t1 < 0 && t2 > 0) {       //t1 is under 0
+            if (t1 < 0 && t2 > 0.01f) {       //t1 is under 0
                 if (t2 < closest_t) {
                     closest_sphere = sphere;
                     closest_t = t2;
@@ -1249,7 +1265,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
                     inter_triangle = false;
                 }
             }
-            else if (t2 < 0 && t1 > 0) {  //t2 is under 0
+            else if (t2 < 0 && t1 > 0.01f) {  //t2 is under 0
                 if (t1 < closest_t) {
                     closest_sphere = sphere;
                     closest_t = t1;
@@ -1258,7 +1274,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
                 }
             }
 
-            else if (t2 > 0 && t1 > 0) { //both ts are positive
+            else if (t2 > 0.01f && t1 > 0.01f) { //both ts are positive
                 float t = min(t1,t2);
                 if (t < closest_t) {
                     closest_sphere = sphere;
@@ -1270,7 +1286,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
         }
         else if (discriminant == 0) { //one intersection point
              float t = -b / 2.0;
-             if (t > 0 && t < closest_t) {
+             if (t > 0.01f && t < closest_t) {
                  closest_t = t;
                  closest_sphere = sphere;
                  intersect = true;
@@ -1344,7 +1360,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
             z1 = ray.origin + (ray.dir * t1);
             z2 = ray.origin + (ray.dir * t2);
 
-            if (t1 < 0 && t2 > 0) {       //t1 is under 0
+            if (t1 < 0 && t2 > 0.01f) {       //t1 is under 0
                 if (t2 < closest_t) {
                     if (dot(cylinder.dir, z2-p1) > 0 && dot(cylinder.dir, z2-p2) < 0 ) {
                         closest_cylinder = cylinder;
@@ -1355,7 +1371,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
                     }
                 }
             }
-            else if (t2 < 0 && t1 > 0) {  //t2 is under 0
+            else if (t2 < 0 && t1 > 0.01f) {  //t2 is under 0
                 if (t1 < closest_t) {
                     if (dot(cylinder.dir, z1-p1) > 0 && dot(cylinder.dir, z1-p2) < 0 ) { 
                         closest_cylinder = cylinder;
@@ -1367,7 +1383,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
                 }
             }
 
-            else if (t2 > 0 && t1 > 0) { //both ts are positive
+            else if (t2 > 0.01f && t1 > 0.01f) { //both ts are positive
                 float t = min(t1,t2);
                 vec3 z = ray.origin + (ray.dir * t);
                 if (t < closest_t) {
@@ -1398,7 +1414,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
         else if (discriminant == 0) { //one intersection point
             float t = -b / (2.0f * a);
             vec3 z = ray.origin + (ray.dir * t);
-            if (t > 0 && t < closest_t) {
+            if (t > 0.01f && t < closest_t) {
                 if (dot(cylinder.dir, z-p1) > 0 && dot(cylinder.dir, z-p2) < 0 ) {
                     closest_t = t;
                     closest_cylinder = cylinder;
@@ -1412,15 +1428,21 @@ vec3 trace_ray(Ray ray, Scene scene) {
 
 
     if (!intersect) {
-        //printf("No INTERSECTION\n");
+        // cout << "Ray origin: " << ray.origin << endl;
+        // cout << "Ray dir: " << ray.dir << endl;
+        // printf("No INTERSECTION\n");
+        if (recursion) {
+            //printf("Returning empty color AND END RECURSION ================\n");
+            return vec3 {0,0,0};
+        }
         return scene.bkgcolor;
     }
     else {
         //printf("T: %f\n", closest_t);
         vec3 intersection_point;
-        intersection_point.x = (ray.origin.x + ray.dir.x*closest_t);
-        intersection_point.y = (ray.origin.y + ray.dir.y*closest_t);
-        intersection_point.z =(ray.origin.z + ray.dir.z*closest_t);
+        intersection_point.x = (ray.origin.x + (ray.dir.x*closest_t));
+        intersection_point.y = (ray.origin.y + (ray.dir.y*closest_t));
+        intersection_point.z =(ray.origin.z + (ray.dir.z*closest_t));
 
         if (inter_triangle) { //calculate triangle shading
             return shade_rayTriangle(scene,closest_triangle, intersection_point);
@@ -1431,7 +1453,7 @@ vec3 trace_ray(Ray ray, Scene scene) {
         }
 
         else { //sphere shading
-            return shade_ray(scene,closest_sphere, intersection_point);
+            return shade_ray(scene,closest_sphere, ray, intersection_point, recursion_depth);
         }
     }
 }
@@ -1481,7 +1503,7 @@ int main(int argc, char* argv[]) {
             p0 = scene.vertices[scene.faces[i].v.x-1];
             p1 = scene.vertices[scene.faces[i].v.y-1];
             p2 = scene.vertices[scene.faces[i].v.z-1];
-            //printf("TYPE 1 \n");
+            printf("TYPE 1 \n");
             n0 = scene.norm_vertices[scene.faces[i].vn.x-1];
             n1 = scene.norm_vertices[scene.faces[i].vn.y-1];
             n2 = scene.norm_vertices[scene.faces[i].vn.z-1];
@@ -1500,7 +1522,7 @@ int main(int argc, char* argv[]) {
             scene.triangles.push_back(t);
         }
         else if (scene.faces[i].type == 2) { //f 0/1 0/1 0/1 texture w/o smooth-shading v/t
-            //printf("TYPE 2 \n");
+            printf("TYPE 2 \n");
             vec3 p0, p1, p2;
             vec3 vt0, vt1, vt2;
             p0 = scene.vertices[scene.faces[i].v.x-1];
@@ -1524,7 +1546,7 @@ int main(int argc, char* argv[]) {
             scene.triangles.push_back(t);
         }
         else if (scene.faces[i].type == 3) { //f 0/1/1 0/1/1 0/1/1 smooth shaded texture triangle v/t/n
-            //printf("TYPE 3 \n");
+            printf("TYPE 3 \n");
             vec3 p0, p1, p2;
             vec3 n0, n1, n2; 
             vec3 vt0, vt1, vt2;
@@ -1619,7 +1641,7 @@ int main(int argc, char* argv[]) {
             ray.dir = dir;
 
             //call to check it if intersects
-            vec3 color = trace_ray(ray, scene);
+            vec3 color = trace_ray(ray, scene, 1, false);
             imageArray[j][i]=color;
         }
     }
